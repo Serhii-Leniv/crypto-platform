@@ -1,0 +1,223 @@
+services:
+  postgres:
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    container_name: crypto_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crypto_user
+      POSTGRES_PASSWORD: crypto_password
+      POSTGRES_DB: auth_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U crypto_user -d auth_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crypto-network
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: crypto_redis_auth
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_auth_data:/data
+    networks:
+      - crypto-network
+
+  redis-market:
+    image: redis:7-alpine
+    container_name: crypto_redis_market
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_market_data:/data
+    networks:
+      - crypto-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: crypto_zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - crypto-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: crypto_kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - crypto-network
+    healthcheck:
+      test: [ "CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: crypto_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@crypto.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - crypto-network
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: crypto-auth/Dockerfile
+    container_name: crypto_auth_service
+    restart: on-failure
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: crypto_user
+      SPRING_DATASOURCE_PASSWORD: crypto_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_DATA_REDIS_HOST: redis-cache
+      SPRING_DATA_REDIS_PORT: 6379
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-helloamerikabananosouthasia01000010jizi}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+    networks:
+      - crypto-network
+
+  order-service:
+    build:
+      context: .
+      dockerfile: crypto-order-matching/Dockerfile
+    container_name: crypto_order_service
+    restart: on-failure
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/order_db
+      SPRING_DATASOURCE_USERNAME: crypto_user
+      SPRING_DATASOURCE_PASSWORD: crypto_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-helloamerikabananosouthasia01000010jizi}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - crypto-network
+
+  wallet-service:
+    build:
+      context: .
+      dockerfile: crypto-wallet/Dockerfile
+    container_name: crypto_wallet_service
+    restart: on-failure
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/wallet_db
+      SPRING_DATASOURCE_USERNAME: crypto_user
+      SPRING_DATASOURCE_PASSWORD: crypto_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-helloamerikabananosouthasia01000010jizi}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - crypto-network
+
+  market-service:
+    build:
+      context: .
+      dockerfile: crypto-market-data/Dockerfile
+    container_name: crypto_market_service
+    restart: on-failure
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/market_db
+      SPRING_DATASOURCE_USERNAME: crypto_user
+      SPRING_DATASOURCE_PASSWORD: crypto_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_DATA_REDIS_HOST: redis-market
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis-market:
+        condition: service_started
+    networks:
+      - crypto-network
+
+  gateway-service:
+    build:
+      context: .
+      dockerfile: crypto-gateway/Dockerfile
+    container_name: crypto_gateway_service
+    restart: on-failure
+    ports:
+      - "8080:8080"
+    environment:
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-helloamerikabananosouthasia01000010jizi}
+      AUTH_SERVICE_URL: http://auth-service:8081
+      ORDER_SERVICE_URL: http://order-service:8082
+      WALLET_SERVICE_URL: http://wallet-service:8083
+      MARKET_SERVICE_URL: http://market-service:8084
+    depends_on:
+      - auth-service
+      - order-service
+      - wallet-service
+      - market-service
+    networks:
+      - crypto-network
+
+volumes:
+  postgres_data:
+  redis_auth_data:
+  redis_market_data:
+
+
+networks:
+  crypto-network:
+    driver: bridge
