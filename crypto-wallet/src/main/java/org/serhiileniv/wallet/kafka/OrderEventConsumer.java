@@ -1,7 +1,9 @@
 package org.serhiileniv.wallet.kafka;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.serhiileniv.wallet.kafka.event.OrderCancelledEvent;
 import org.serhiileniv.wallet.kafka.event.OrderMatchedEvent;
 import org.serhiileniv.wallet.kafka.event.OrderPlacedEvent;
 import org.serhiileniv.wallet.kafka.event.OrderSide;
@@ -15,6 +17,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -22,6 +25,7 @@ public class OrderEventConsumer {
     private final WalletService walletService;
     private final ProcessedEventRepository processedEventRepository;
     private final ObjectMapper objectMapper;
+
     @KafkaListener(topics = "order-events", groupId = "wallet-service-group")
     @Transactional
     public void consumeOrderEvent(@Payload String message,
@@ -35,11 +39,15 @@ public class OrderEventConsumer {
             } else if (message.contains("\"orderId\"")) {
                 OrderPlacedEvent placedEvent = objectMapper.readValue(message, OrderPlacedEvent.class);
                 handleOrderPlaced(placedEvent);
+            } else if (message.contains("\"reason\"")) {
+                OrderCancelledEvent cancelledEvent = objectMapper.readValue(message, OrderCancelledEvent.class);
+                handleOrderCancelled(cancelledEvent);
             }
         } catch (Exception e) {
             log.error("Error processing event: {}", message, e);
         }
     }
+
     private void handleOrderPlaced(OrderPlacedEvent event) {
         if (processedEventRepository.existsByEventId(event.getOrderId())) {
             log.info("Order {} already processed, skipping", event.getOrderId());
@@ -50,10 +58,33 @@ public class OrderEventConsumer {
             String quoteCurrency = extractQuoteCurrency(event.getSymbol());
             BigDecimal totalCost = event.getPrice().multiply(event.getQuantity());
             walletService.lockFunds(event.getUserId(), quoteCurrency, totalCost, event.getOrderId());
+        } else if (event.getSide() == OrderSide.SELL) {
+            String baseCurrency = extractBaseCurrency(event.getSymbol());
+            walletService.lockFunds(event.getUserId(), baseCurrency, event.getQuantity(), event.getOrderId());
         }
         processedEventRepository.save(new ProcessedEvent(event.getOrderId(), "ORDER_PLACED"));
         log.info("OrderPlacedEvent processed: {}", event.getOrderId());
     }
+
+    private void handleOrderCancelled(OrderCancelledEvent event) {
+        if (processedEventRepository.existsByEventId(event.getOrderId())) {
+            log.info("Cancellation for order {} already processed, skipping", event.getOrderId());
+            return;
+        }
+        log.info("Processing OrderCancelledEvent: {}", event.getOrderId());
+        if (event.getSide() == OrderSide.BUY && event.getPrice() != null) {
+            String quoteCurrency = extractQuoteCurrency(event.getSymbol());
+            BigDecimal totalCost = event.getPrice().multiply(event.getRemainingQuantity());
+            walletService.unlockFunds(event.getUserId(), quoteCurrency, totalCost, event.getOrderId());
+        } else if (event.getSide() == OrderSide.SELL) {
+            String baseCurrency = extractBaseCurrency(event.getSymbol());
+            walletService.unlockFunds(event.getUserId(), baseCurrency, event.getRemainingQuantity(),
+                    event.getOrderId());
+        }
+        processedEventRepository.save(new ProcessedEvent(event.getOrderId(), "ORDER_CANCELLED"));
+        log.info("OrderCancelledEvent processed: {}", event.getOrderId());
+    }
+
     private void handleOrderMatched(OrderMatchedEvent event) {
         if (processedEventRepository.existsByEventId(event.getTradeId())) {
             log.info("Trade {} already processed, skipping", event.getTradeId());
@@ -72,11 +103,18 @@ public class OrderEventConsumer {
         processedEventRepository.save(new ProcessedEvent(event.getTradeId(), "ORDER_MATCHED"));
         log.info("OrderMatchedEvent processed: {}", event.getTradeId());
     }
+
     private String[] extractCurrencies(String symbol) {
-        return symbol.split("/");
+        return symbol.split("[/-]");
     }
+
     private String extractQuoteCurrency(String symbol) {
-        String[] parts = symbol.split("/");
-        return parts.length > 1 ? parts[1] : "USD";
+        String[] parts = symbol.split("[/-]");
+        return parts.length > 1 ? parts[1] : "USDT";
+    }
+
+    private String extractBaseCurrency(String symbol) {
+        String[] parts = symbol.split("[/-]");
+        return parts[0];
     }
 }

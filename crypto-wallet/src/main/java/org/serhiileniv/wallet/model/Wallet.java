@@ -1,11 +1,14 @@
 package org.serhiileniv.wallet.model;
+
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.serhiileniv.wallet.exception.InsufficientFundsException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+
 @Entity
 @Table(name = "wallets", uniqueConstraints = {
         @UniqueConstraint(columnNames = { "user_id", "currency" })
@@ -36,48 +39,54 @@ public class Wallet {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
     public BigDecimal getAvailableBalance() {
         return balance.subtract(lockedBalance);
     }
+
     public void deposit(BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Deposit amount must be positive");
         }
         this.balance = this.balance.add(amount);
     }
+
     public void withdraw(BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Withdrawal amount must be positive");
         }
         if (getAvailableBalance().compareTo(amount) < 0) {
-            throw new IllegalStateException("Insufficient available balance");
+            throw new InsufficientFundsException("Insufficient funds");
         }
         this.balance = this.balance.subtract(amount);
     }
+
     public void lock(BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Lock amount must be positive");
         }
         if (getAvailableBalance().compareTo(amount) < 0) {
-            throw new IllegalStateException("Insufficient available balance to lock");
+            throw new InsufficientFundsException("Insufficient available balance to lock");
         }
         this.lockedBalance = this.lockedBalance.add(amount);
     }
+
     public void unlock(BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Unlock amount must be positive");
         }
         if (this.lockedBalance.compareTo(amount) < 0) {
-            throw new IllegalStateException("Insufficient locked balance");
+            throw new InsufficientFundsException("Insufficient locked balance");
         }
         this.lockedBalance = this.lockedBalance.subtract(amount);
     }
+
     public void debitLocked(BigDecimal amount) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Debit amount must be positive");
         }
         if (this.lockedBalance.compareTo(amount) < 0) {
-            throw new IllegalStateException("Insufficient locked balance");
+            throw new InsufficientFundsException("Insufficient locked balance");
         }
         this.lockedBalance = this.lockedBalance.subtract(amount);
         this.balance = this.balance.subtract(amount);

@@ -36,6 +36,9 @@ spring-boot-*.log
 .DS_Store
 Thumbs.db
 
+# Environment secrets
+.env
+
 # Temporary files
 *.tmp
 *.swp

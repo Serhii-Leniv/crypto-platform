@@ -14,7 +14,6 @@ COPY crypto-market-data ./crypto-market-data
 
 # Завантажуємо залежності та збираємо проект
 WORKDIR /build/crypto-market-data
-RUN mvn dependency:go-offline -B
 RUN mvn clean package -DskipTests
 
 # Етап 2: Запуск (Runtime)
