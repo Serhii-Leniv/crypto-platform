@@ -199,8 +199,6 @@ See [`.env.example`](.env.example) for a full list. The most important variable 
 |-----------------|---------------------------------|---------------------|
 | `JWT_SECRET_KEY`| HS256 secret for JWT signing    | Local dev value     |
 
-> **⚠️ Warning:** The default JWT secret is for local development only. Always set a strong, random secret in production.
-
 ---
 
 ## 🗂️ Project Structure
