@@ -1,4 +1,5 @@
 package org.serhiileniv.order.service;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.serhiileniv.order.kafka.OrderEventProducer;
@@ -13,12 +14,14 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class OrderMatchingEngine {
     private final OrderRepository orderRepository;
     private final OrderEventProducer eventProducer;
+
     @Transactional
     public List<OrderMatchedEvent> matchOrder(Order newOrder) {
         log.info("Starting matching process for order: {}", newOrder.getId());
@@ -43,7 +46,7 @@ public class OrderMatchingEngine {
                 newOrder.getId(), newOrder.getFilledQuantity(), newOrder.getQuantity());
         return matchedEvents;
     }
-    
+
     private List<Order> getCounterpartyOrders(Order order) {
         if (order.getSide() == OrderSide.BUY) {
             return orderRepository.findSellOrdersForMatching(order.getSymbol(), OrderSide.SELL);
@@ -51,7 +54,7 @@ public class OrderMatchingEngine {
             return orderRepository.findBuyOrdersForMatching(order.getSymbol(), OrderSide.BUY);
         }
     }
-    
+
     private boolean canMatch(Order newOrder, Order counterpartyOrder) {
         if (newOrder.getPrice() == null) {
             return true;
@@ -62,7 +65,7 @@ public class OrderMatchingEngine {
             return newOrder.getPrice().compareTo(counterpartyOrder.getPrice()) <= 0;
         }
     }
-    
+
     private OrderMatchedEvent executeMatch(Order newOrder, Order counterpartyOrder) {
         BigDecimal fillQuantity = newOrder.getRemainingQuantity()
                 .min(counterpartyOrder.getRemainingQuantity());
@@ -89,13 +92,14 @@ public class OrderMatchingEngine {
         event.setTimestamp(LocalDateTime.now());
         return event;
     }
-    
+
+    @Transactional
     public OrderBook getOrderBook(String symbol) {
         List<Order> buyOrders = orderRepository.findBuyOrdersForMatching(symbol, OrderSide.BUY);
         List<Order> sellOrders = orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL);
         return new OrderBook(buyOrders, sellOrders);
     }
-    
+
     public record OrderBook(List<Order> buyOrders, List<Order> sellOrders) {
     }
 }

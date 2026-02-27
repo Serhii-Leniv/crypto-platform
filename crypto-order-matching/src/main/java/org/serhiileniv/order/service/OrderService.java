@@ -82,12 +82,14 @@ public class OrderService {
                 log.info("Order cancelled: {}", orderId);
         }
 
+        @Transactional
         public OrderResponse getOrderById(UUID orderId, UUID userId) {
                 Order order = orderRepository.findByIdAndUserId(orderId, userId)
                                 .orElseThrow(() -> new OrderNotFoundException(orderId));
                 return OrderResponse.fromEntity(order);
         }
 
+        @Transactional(readOnly = true)
         public List<OrderResponse> getUserOrders(UUID userId) {
                 List<Order> orders = orderRepository.findByUserIdOrderByCreatedAtDesc(userId);
                 return orders.stream()
@@ -95,6 +97,7 @@ public class OrderService {
                                 .collect(Collectors.toList());
         }
 
+        @Transactional
         public OrderMatchingEngine.OrderBook getOrderBook(String symbol) {
                 return matchingEngine.getOrderBook(symbol);
         }
