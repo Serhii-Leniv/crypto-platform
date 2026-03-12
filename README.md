@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-Apex Crypto
-=======
 # 🪙 Crypto Exchange Platform
 
 [![Java](https://img.shields.io/badge/Java-17-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/17/)
