@@ -32,19 +32,16 @@ public class OrderEventConsumer {
             @Header(KafkaHeaders.RECEIVED_KEY) String key) {
         try {
             log.info("Received event with key: {}", key);
-            Object event = objectMapper.readValue(message, Object.class);
-            if (message.contains("\"tradeId\"")) {
-                OrderMatchedEvent matchedEvent = objectMapper.readValue(message, OrderMatchedEvent.class);
-                handleOrderMatched(matchedEvent);
-            } else if (message.contains("\"orderId\"")) {
-                OrderPlacedEvent placedEvent = objectMapper.readValue(message, OrderPlacedEvent.class);
-                handleOrderPlaced(placedEvent);
-            } else if (message.contains("\"reason\"")) {
-                OrderCancelledEvent cancelledEvent = objectMapper.readValue(message, OrderCancelledEvent.class);
-                handleOrderCancelled(cancelledEvent);
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(message);
+            String eventType = root.path("eventType").asText("");
+            switch (eventType) {
+                case "ORDER_MATCHED"   -> handleOrderMatched(objectMapper.treeToValue(root, OrderMatchedEvent.class));
+                case "ORDER_PLACED"    -> handleOrderPlaced(objectMapper.treeToValue(root, OrderPlacedEvent.class));
+                case "ORDER_CANCELLED" -> handleOrderCancelled(objectMapper.treeToValue(root, OrderCancelledEvent.class));
+                default -> log.warn("Unknown or missing eventType '{}', key={}", eventType, key);
             }
         } catch (Exception e) {
-            log.error("Error processing event: {}", message, e);
+            log.error("Error processing event key={}: {}", key, message, e);
         }
     }
 
