@@ -8,6 +8,7 @@ import org.serhiileniv.marketdata.repository.MarketDataRepository;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -44,6 +45,7 @@ public class MarketDataService {
                     MarketData newData = MarketData.builder()
                             .symbol(symbol)
                             .lastPrice(price)
+                            .openPrice24h(price)
                             .high24h(price)
                             .low24h(price)
                             .volume24h(BigDecimal.ZERO)
@@ -58,5 +60,18 @@ public class MarketDataService {
         marketData.updateFromTrade(price, quantity);
         marketDataRepository.save(marketData);
         log.info("Market data updated for {}: {}", symbol, marketData.getLastPrice());
+    }
+
+    @Scheduled(cron = "0 0 0 * * *")
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "marketData", allEntries = true),
+            @CacheEvict(value = "allMarketData", allEntries = true)
+    })
+    public void resetDailyStats() {
+        List<MarketData> all = marketDataRepository.findAll();
+        all.forEach(MarketData::resetDailyStats);
+        marketDataRepository.saveAll(all);
+        log.info("24h stats reset for {} symbols", all.size());
     }
 }
