@@ -19,11 +19,11 @@
     <description>Microservices Crypto Exchange Platform</description>
 
     <modules>
-        <module>crypto-auth</module>
-        <module>crypto-order-matching</module>
-        <module>crypto-wallet</module>
-        <module>crypto-market-data</module>
-        <module>crypto-gateway</module>
+        <module>auth</module>
+        <module>order-matching</module>
+        <module>wallet</module>
+        <module>market-data</module>
+        <module>gateway</module>
     </modules>
 
 

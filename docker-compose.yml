@@ -3,7 +3,7 @@ services:
     build:
       context: ./docker/postgres
       dockerfile: Dockerfile
-    container_name: crypto_postgres
+    container_name: postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: crypto_user
@@ -23,7 +23,7 @@ services:
 
   redis-cache:
     image: redis:7-alpine
-    container_name: crypto_redis_auth
+    container_name: redis-auth
     restart: unless-stopped
     command: redis-server --save 900 1 300 10 --appendonly yes
     ports:
@@ -35,7 +35,7 @@ services:
 
   redis-market:
     image: redis:7-alpine
-    container_name: crypto_redis_market
+    container_name: redis-market
     restart: unless-stopped
     command: redis-server --save 900 1 300 10 --appendonly yes
     ports:
@@ -47,7 +47,7 @@ services:
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
-    container_name: crypto_zookeeper
+    container_name: zookeeper
     restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -59,7 +59,7 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
-    container_name: crypto_kafka
+    container_name: kafka
     restart: unless-stopped
     depends_on:
       - zookeeper
@@ -84,7 +84,7 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: crypto_pgadmin
+    container_name: pgadmin
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@crypto.com
@@ -99,8 +99,8 @@ services:
   auth-service:
     build:
       context: .
-      dockerfile: crypto-auth/Dockerfile
-    container_name: crypto_auth_service
+      dockerfile: auth/Dockerfile
+    container_name: auth-service
     restart: on-failure
     ports:
       - "8081:8081"
@@ -123,8 +123,8 @@ services:
   order-service:
     build:
       context: .
-      dockerfile: crypto-order-matching/Dockerfile
-    container_name: crypto_order_service
+      dockerfile: order-matching/Dockerfile
+    container_name: order-matching-service
     restart: on-failure
     ports:
       - "8082:8082"
@@ -146,8 +146,8 @@ services:
   wallet-service:
     build:
       context: .
-      dockerfile: crypto-wallet/Dockerfile
-    container_name: crypto_wallet_service
+      dockerfile: wallet/Dockerfile
+    container_name: wallet-service
     restart: on-failure
     ports:
       - "8083:8083"
@@ -169,8 +169,8 @@ services:
   market-service:
     build:
       context: .
-      dockerfile: crypto-market-data/Dockerfile
-    container_name: crypto_market_service
+      dockerfile: market-data/Dockerfile
+    container_name: market-data-service
     restart: on-failure
     ports:
       - "8084:8084"
@@ -195,8 +195,8 @@ services:
   gateway-service:
     build:
       context: .
-      dockerfile: crypto-gateway/Dockerfile
-    container_name: crypto_gateway_service
+      dockerfile: gateway/Dockerfile
+    container_name: api-gateway
     restart: on-failure
     ports:
       - "8080:8080"
@@ -219,7 +219,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: crypto_frontend
+    container_name: frontend
     restart: unless-stopped
     ports:
       - "3000:80"
