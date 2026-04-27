@@ -3,6 +3,6 @@ model = "gemini/gemini-1.5-flash"
 fallback_models = ["gemini/gemini-1.5-flash"]
 
 [github_action_config]
-auto_review = true
+auto_review   = true
 auto_describe = true
-auto_improve = true
+auto_improve  = true

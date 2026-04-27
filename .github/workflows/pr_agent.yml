@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: 'PR number to review (e.g. 1)'
+        description: 'PR number to review (e.g. 2)'
         required: true
         type: number
 
@@ -28,10 +28,7 @@ jobs:
         env:
           OPENAI_KEY: "dummy"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Both names — litellm picks up GEMINI_API_KEY, PR-Agent picks up GOOGLE_AI_STUDIO_KEY
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          config.model: "gemini/gemini-1.5-flash"
-          config.fallback_models: "gemini/gemini-1.5-flash"
-          github_action_config.auto_review: "true"
-          github_action_config.auto_describe: "true"
-          github_action_config.auto_improve: "true"
-          github_action_config.pr_number: ${{ github.event.inputs.pr_number }}
+          GOOGLE_AI_STUDIO_KEY: ${{ secrets.GEMINI_API_KEY }}
+          github_action_config.pr_number: ${{ inputs.pr_number }}
