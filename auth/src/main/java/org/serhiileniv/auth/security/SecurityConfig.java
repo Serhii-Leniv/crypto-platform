@@ -1,4 +1,4 @@
-package org.serhiileniv.cryptoauth.security;
+package org.serhiileniv.auth.security;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;

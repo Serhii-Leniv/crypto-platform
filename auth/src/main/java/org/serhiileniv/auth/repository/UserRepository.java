@@ -1,5 +1,5 @@
-package org.serhiileniv.cryptoauth.repository;
-import org.serhiileniv.cryptoauth.model.User;
+package org.serhiileniv.auth.repository;
+import org.serhiileniv.auth.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import java.util.Optional;

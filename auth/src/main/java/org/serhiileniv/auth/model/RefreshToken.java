@@ -1,4 +1,4 @@
-package org.serhiileniv.cryptoauth.model;
+package org.serhiileniv.auth.model;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;

@@ -1,13 +1,13 @@
-package org.serhiileniv.cryptoauth.controller;
+package org.serhiileniv.auth.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.serhiileniv.cryptoauth.dto.AuthResponse;
-import org.serhiileniv.cryptoauth.dto.UserDto;
-import org.serhiileniv.cryptoauth.service.UserService;
+import org.serhiileniv.auth.dto.AuthResponse;
+import org.serhiileniv.auth.dto.UserDto;
+import org.serhiileniv.auth.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

@@ -1,4 +1,4 @@
-package org.serhiileniv.cryptoauth.exception;
+package org.serhiileniv.auth.exception;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;

@@ -1,4 +1,4 @@
-package org.serhiileniv.cryptoauth.model;
+package org.serhiileniv.auth.model;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.security.core.GrantedAuthority;

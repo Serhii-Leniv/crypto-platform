@@ -1,4 +1,4 @@
-package org.serhiileniv.cryptoauth.service;
+package org.serhiileniv.auth.service;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 import java.nio.charset.StandardCharsets;
-import org.serhiileniv.cryptoauth.model.User;
+import org.serhiileniv.auth.model.User;
 
 @Service
 @RequiredArgsConstructor

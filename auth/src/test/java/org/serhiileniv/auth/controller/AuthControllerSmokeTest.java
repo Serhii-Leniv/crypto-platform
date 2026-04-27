@@ -1,12 +1,12 @@
-package org.serhiileniv.cryptoauth.controller;
+package org.serhiileniv.auth.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import org.serhiileniv.cryptoauth.dto.AuthResponse;
-import org.serhiileniv.cryptoauth.dto.UserDto;
-import org.serhiileniv.cryptoauth.service.UserService;
-import org.serhiileniv.cryptoauth.service.JwtService;
-import org.serhiileniv.cryptoauth.security.JwtAuthenticationFilter;
+import org.serhiileniv.auth.dto.AuthResponse;
+import org.serhiileniv.auth.dto.UserDto;
+import org.serhiileniv.auth.service.UserService;
+import org.serhiileniv.auth.service.JwtService;
+import org.serhiileniv.auth.security.JwtAuthenticationFilter;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;

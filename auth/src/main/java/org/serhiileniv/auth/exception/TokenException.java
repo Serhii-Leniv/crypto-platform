@@ -1,4 +1,4 @@
-package org.serhiileniv.cryptoauth.exception;
+package org.serhiileniv.auth.exception;
 
 public class TokenException extends RuntimeException {
     public TokenException(String message) {

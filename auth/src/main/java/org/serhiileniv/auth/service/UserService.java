@@ -1,17 +1,17 @@
-package org.serhiileniv.cryptoauth.service;
+package org.serhiileniv.auth.service;
 
 import org.springframework.http.HttpHeaders;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.serhiileniv.cryptoauth.dto.AuthResponse;
-import org.serhiileniv.cryptoauth.dto.UserDto;
-import org.serhiileniv.cryptoauth.exception.InvalidCredentialsException;
-import org.serhiileniv.cryptoauth.exception.TokenException;
-import org.serhiileniv.cryptoauth.exception.UserAlreadyExistsException;
-import org.serhiileniv.cryptoauth.model.RefreshToken;
-import org.serhiileniv.cryptoauth.model.User;
-import org.serhiileniv.cryptoauth.repository.RefreshTokenRepository;
-import org.serhiileniv.cryptoauth.repository.UserRepository;
+import org.serhiileniv.auth.dto.AuthResponse;
+import org.serhiileniv.auth.dto.UserDto;
+import org.serhiileniv.auth.exception.InvalidCredentialsException;
+import org.serhiileniv.auth.exception.TokenException;
+import org.serhiileniv.auth.exception.UserAlreadyExistsException;
+import org.serhiileniv.auth.model.RefreshToken;
+import org.serhiileniv.auth.model.User;
+import org.serhiileniv.auth.repository.RefreshTokenRepository;
+import org.serhiileniv.auth.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

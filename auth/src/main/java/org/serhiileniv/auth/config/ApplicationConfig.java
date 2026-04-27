@@ -1,6 +1,6 @@
-package org.serhiileniv.cryptoauth.config;
+package org.serhiileniv.auth.config;
 import lombok.RequiredArgsConstructor;
-import org.serhiileniv.cryptoauth.repository.UserRepository;
+import org.serhiileniv.auth.repository.UserRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;

@@ -1,5 +1,5 @@
-package org.serhiileniv.cryptoauth.repository;
-import org.serhiileniv.cryptoauth.model.RefreshToken;
+package org.serhiileniv.auth.repository;
+import org.serhiileniv.auth.model.RefreshToken;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 @Repository
