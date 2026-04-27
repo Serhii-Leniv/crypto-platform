@@ -15,13 +15,13 @@ mvn -B clean package -DskipTests
 mvn -B clean verify -DskipTests=false
 
 # Run tests for a single module
-mvn -B test -pl crypto-order-matching
+mvn -B test -pl order-matching
 
 # Run a single test class
-mvn -B test -pl crypto-order-matching -Dtest=OrderMatchingEngineTest
+mvn -B test -pl order-matching -Dtest=OrderMatchingEngineTest
 
 # Run a single test method
-mvn -B test -pl crypto-wallet -Dtest=WalletServiceTest#methodName
+mvn -B test -pl wallet -Dtest=WalletServiceTest#methodName
 ```
 
 ## Running the Full Stack
@@ -46,17 +46,26 @@ Maven multi-module project — one parent `pom.xml` with five Spring Boot child 
 
 | Module | Port | Role |
 |---|---|---|
-| `crypto-gateway` | 8080 | Spring Cloud Gateway — single entry point, JWT filter, CORS |
-| `crypto-auth` | 8081 | Registration, login, JWT issuance, refresh token rotation |
-| `crypto-order-matching` | 8082 | Order book, price-time-priority matching engine, Kafka producer |
-| `crypto-wallet` | 8083 | Wallet balances, fund locking/unlocking, Kafka consumer |
-| `crypto-market-data` | 8084 | 24h trade stats, public market data, Kafka consumer + Redis cache |
+| `gateway` | 8080 | Spring Cloud Gateway — single entry point, JWT filter, CORS |
+| `auth` | 8081 | Registration, login, JWT issuance, refresh token rotation |
+| `order-matching` | 8082 | Order book, price-time-priority matching engine, Kafka producer |
+| `wallet` | 8083 | Wallet balances, fund locking/unlocking, Kafka consumer |
+| `market-data` | 8084 | 24h trade stats, public market data, Kafka consumer + Redis cache |
 
 **Infrastructure:** Single PostgreSQL instance with separate databases per service (`auth_db`, `order_db`, `wallet_db`, `market_db`). Two Redis instances: `redis-cache` (:6379) for auth refresh tokens, `redis-market` (:6380) for market data cache.
 
+## Naming Conventions
+
+- **Module directories**: no prefix — `auth`, `gateway`, `wallet`, `order-matching`, `market-data`
+- **Spring app names**: `auth-service`, `api-gateway`, `wallet-service`, `order-matching-service`, `market-data-service`
+- **Java packages**: `org.serhiileniv.auth`, `org.serhiileniv.gateway`, `org.serhiileniv.wallet`, `org.serhiileniv.order`, `org.serhiileniv.marketdata`
+- **Docker containers**: `auth-service`, `api-gateway`, `wallet-service`, `order-matching-service`, `market-data-service`
+- **Kafka consumer groups**: `wallet-group`, `market-data-group`
+- **Kafka topics**: `order-events`
+
 ## Request Flow & Auth
 
-The gateway validates JWTs **before** forwarding requests. `crypto-gateway/JwtAuthenticationFilter` parses the `Authorization: Bearer <token>` header, extracts the `userId` claim, and injects an `X-User-Id` header into the downstream request. Services read user identity from this header — they do not re-validate JWTs independently (except `crypto-wallet` which also holds a JWT secret for its own token extraction).
+The gateway validates JWTs **before** forwarding requests. `gateway/JwtAuthenticationFilter` parses the `Authorization: Bearer <token>` header, extracts the `userId` claim, and injects an `X-User-Id` header into the downstream request. Services read user identity from this header — they do not re-validate JWTs independently (except `wallet` which also holds a JWT secret for its own token extraction).
 
 Routes `/api/v1/auth/**` and `/api/v1/market-data/**` are public. All other routes require the `JwtAuthenticationFilter` gateway filter.
 
@@ -71,7 +80,7 @@ Order placement in `OrderService` follows this sequence:
 4. If a match is found, publish `OrderMatchedEvent` → `order-events`.
 5. On cancel, publish `OrderCancelledEvent` → `order-events`.
 
-Both `crypto-wallet` and `crypto-market-data` consume from `order-events` in separate consumer groups. Event type discrimination in `OrderEventConsumer` is done by inspecting JSON field presence (`tradeId` → matched, `orderId` → placed, `reason` → cancelled).
+Both `wallet` and `market-data` consume from `order-events` in separate consumer groups. Event type discrimination uses the `eventType` field: `ORDER_PLACED`, `ORDER_MATCHED`, `ORDER_CANCELLED`.
 
 Idempotency is enforced via a `ProcessedEvent` table in the wallet service — events keyed by `orderId` or `tradeId` are skipped if already processed.
 
@@ -87,5 +96,5 @@ Symbol format is `BASE-QUOTE` (e.g., `BTC-USDT`), split on `/` or `-`.
 
 - **Lombok + MapStruct**: annotation processor order matters — `lombok-mapstruct-binding` is declared in the parent POM's compiler plugin. Always keep Lombok before MapStruct in `annotationProcessorPaths`.
 - **DDL**: `spring.jpa.hibernate.ddl-auto=update` in all services. Schema evolves automatically — no migration tool.
-- **JWT secret must match** across gateway, auth, order, and wallet services. All four read from the `JWT_SECRET_KEY` env var / `application.security.jwt.secret-key` property.
+- **JWT secret must match** across gateway, auth, order-matching, and wallet services. All four read from the `JWT_SECRET_KEY` env var / `application.security.jwt.secret-key` property.
 - **Tests use Mockito mocks** — no embedded DB or Testcontainers. Smoke tests (`*SmokeTest`) use `@SpringBootTest` with `@MockBean` for infrastructure.
