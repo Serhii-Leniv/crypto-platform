@@ -6,6 +6,7 @@ import org.serhiileniv.order.kafka.OrderEventProducer;
 import org.serhiileniv.order.kafka.event.OrderMatchedEvent;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
+import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.repository.OrderRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,10 @@ public class OrderMatchingEngine {
         for (Order counterpartyOrder : counterpartyOrders) {
             if (newOrder.isFullyFilled()) {
                 break;
+            }
+            if (counterpartyOrder.getStatus() != OrderStatus.PENDING
+                    && counterpartyOrder.getStatus() != OrderStatus.PARTIALLY_FILLED) {
+                continue;
             }
             if (!canMatch(newOrder, counterpartyOrder)) {
                 break;
@@ -56,9 +61,8 @@ public class OrderMatchingEngine {
     }
 
     private boolean canMatch(Order newOrder, Order counterpartyOrder) {
-        if (newOrder.getPrice() == null) {
-            return true;
-        }
+        if (newOrder.getPrice() == null) return true;           // MARKET aggressor matches any
+        if (counterpartyOrder.getPrice() == null) return true;  // MARKET counterparty — use aggressor price
         if (newOrder.getSide() == OrderSide.BUY) {
             return newOrder.getPrice().compareTo(counterpartyOrder.getPrice()) >= 0;
         } else {
@@ -69,7 +73,9 @@ public class OrderMatchingEngine {
     private OrderMatchedEvent executeMatch(Order newOrder, Order counterpartyOrder) {
         BigDecimal fillQuantity = newOrder.getRemainingQuantity()
                 .min(counterpartyOrder.getRemainingQuantity());
-        BigDecimal matchPrice = counterpartyOrder.getPrice();
+        BigDecimal matchPrice = counterpartyOrder.getPrice() != null
+                ? counterpartyOrder.getPrice()
+                : newOrder.getPrice(); // fallback when counterparty is a MARKET order
         newOrder.fill(fillQuantity);
         counterpartyOrder.fill(fillQuantity);
         UUID tradeId = UUID.randomUUID();

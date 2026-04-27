@@ -42,6 +42,7 @@ class OrderEventConsumerTest {
     @Test
     void consumeOrderEvent_OrderPlaced_LockFunds() throws Exception {
         OrderPlacedEvent event = new OrderPlacedEvent();
+        event.setEventType("ORDER_PLACED");
         event.setOrderId(orderId);
         event.setUserId(userId);
         event.setSymbol(symbol);
@@ -65,6 +66,7 @@ class OrderEventConsumerTest {
         UUID sellerId = UUID.randomUUID();
 
         OrderMatchedEvent event = new OrderMatchedEvent();
+        event.setEventType("ORDER_MATCHED");
         event.setTradeId(tradeId);
         event.setBuyerUserId(buyerId);
         event.setSellerUserId(sellerId);

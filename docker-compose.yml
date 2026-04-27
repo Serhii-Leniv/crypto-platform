@@ -25,6 +25,7 @@ services:
     image: redis:7-alpine
     container_name: crypto_redis_auth
     restart: unless-stopped
+    command: redis-server --save 900 1 300 10 --appendonly yes
     ports:
       - "6379:6379"
     volumes:
@@ -36,6 +37,7 @@ services:
     image: redis:7-alpine
     container_name: crypto_redis_market
     restart: unless-stopped
+    command: redis-server --save 900 1 300 10 --appendonly yes
     ports:
       - "6380:6379"
     volumes:
@@ -210,6 +212,19 @@ services:
       - order-service
       - wallet-service
       - market-service
+    networks:
+      - crypto-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: crypto_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway-service
     networks:
       - crypto-network
 

@@ -45,9 +45,14 @@ public class MarketData implements Serializable {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+    @Column(precision = 20, scale = 8)
+    private BigDecimal openPrice24h;
+
     public void updateFromTrade(BigDecimal price, BigDecimal quantity) {
-        BigDecimal oldPrice = this.lastPrice;
         this.lastPrice = price;
+        if (this.openPrice24h == null) {
+            this.openPrice24h = price;
+        }
         if (this.high24h == null || price.compareTo(this.high24h) > 0) {
             this.high24h = price;
         }
@@ -59,11 +64,21 @@ public class MarketData implements Serializable {
             this.tradeCount24h = 0L;
         }
         this.tradeCount24h++;
-        if (oldPrice != null && oldPrice.compareTo(BigDecimal.ZERO) > 0) {
-            this.priceChange24h = price.subtract(oldPrice);
-            this.priceChangePercent24h = priceChange24h
-                    .divide(oldPrice, 4, java.math.RoundingMode.HALF_UP)
+        if (this.openPrice24h.compareTo(BigDecimal.ZERO) > 0) {
+            this.priceChange24h = price.subtract(this.openPrice24h);
+            this.priceChangePercent24h = this.priceChange24h
+                    .divide(this.openPrice24h, 4, java.math.RoundingMode.HALF_UP)
                     .multiply(new BigDecimal("100"));
         }
+    }
+
+    public void resetDailyStats() {
+        this.openPrice24h = this.lastPrice;
+        this.high24h = this.lastPrice;
+        this.low24h = this.lastPrice;
+        this.volume24h = BigDecimal.ZERO;
+        this.tradeCount24h = 0L;
+        this.priceChange24h = BigDecimal.ZERO;
+        this.priceChangePercent24h = BigDecimal.ZERO;
     }
 }

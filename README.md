@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-Apex Crypto
-=======
 # 🪙 Crypto Exchange Platform
 
 [![Java](https://img.shields.io/badge/Java-17-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/17/)
@@ -198,8 +195,6 @@ See [`.env.example`](.env.example) for a full list. The most important variable 
 | Variable        | Description                     | Default (insecure!) |
 |-----------------|---------------------------------|---------------------|
 | `JWT_SECRET_KEY`| HS256 secret for JWT signing    | Local dev value     |
-
-> **⚠️ Warning:** The default JWT secret is for local development only. Always set a strong, random secret in production.
 
 ---
 

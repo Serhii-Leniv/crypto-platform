@@ -19,9 +19,9 @@ public class TradeEventConsumer {
     public void consumeOrderEvent(@Payload String message,
             @Header(KafkaHeaders.RECEIVED_KEY) String key) {
         try {
-            if (message.contains("\"tradeId\"")) {
-                OrderMatchedEvent event = objectMapper.readValue(message, OrderMatchedEvent.class);
-                handleTradeEvent(event);
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(message);
+            if ("ORDER_MATCHED".equals(root.path("eventType").asText())) {
+                handleTradeEvent(objectMapper.treeToValue(root, OrderMatchedEvent.class));
             }
         } catch (Exception e) {
             log.error("Error processing trade event: {}", message, e);
