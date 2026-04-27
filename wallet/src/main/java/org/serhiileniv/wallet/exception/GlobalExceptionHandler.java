@@ -1,7 +1,10 @@
 package org.serhiileniv.wallet.exception;
 
+import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -11,6 +14,7 @@ import java.time.Instant;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
+@Slf4j
 @SuppressWarnings("null")
 public class GlobalExceptionHandler {
     private static final URI WALLET_NOT_FOUND_TYPE = URI
@@ -23,6 +27,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(WalletNotFoundException.class)
     public ProblemDetail handleWalletNotFound(WalletNotFoundException ex) {
+        log.warn("Wallet not found — {}", ex.getMessage());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setType(WALLET_NOT_FOUND_TYPE);
         problem.setTitle("Wallet Not Found");
@@ -32,6 +37,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InsufficientFundsException.class)
     public ProblemDetail handleInsufficientFunds(InsufficientFundsException ex) {
+        log.warn("Insufficient funds — {}", ex.getMessage());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problem.setType(INSUFFICIENT_FUNDS_TYPE);
         problem.setTitle("Insufficient Funds");
@@ -42,8 +48,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
         String details = ex.getBindingResult().getFieldErrors().stream()
-                .map(e -> e.getField() + ": " + e.getDefaultMessage())
+                .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining(", "));
+        log.warn("Request body validation failed — {}", details);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, details);
+        problem.setType(VALIDATION_ERROR_TYPE);
+        problem.setTitle("Validation Error");
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ProblemDetail handleConstraintViolation(ConstraintViolationException ex) {
+        String details = ex.getConstraintViolations().stream()
+                .map(cv -> cv.getPropertyPath() + ": " + cv.getMessage())
+                .collect(Collectors.joining(", "));
+        log.warn("Parameter validation failed — {}", details);
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, details);
         problem.setType(VALIDATION_ERROR_TYPE);
         problem.setTitle("Validation Error");
@@ -53,6 +73,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGenericException(Exception ex) {
+        log.error("Unexpected error in wallet service: ", ex);
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
                 "An unexpected error occurred");
         problem.setType(INTERNAL_ERROR_TYPE);

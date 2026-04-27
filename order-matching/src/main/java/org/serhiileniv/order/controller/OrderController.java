@@ -3,14 +3,18 @@ package org.serhiileniv.order.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.serhiileniv.order.dto.OrderRequest;
 import org.serhiileniv.order.dto.OrderResponse;
+import org.serhiileniv.order.service.OrderMatchingEngine;
 import org.serhiileniv.order.service.OrderService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -18,6 +22,7 @@ import java.util.UUID;
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
 @Slf4j
+@Validated
 @Tag(name = "Orders", description = "Endpoints for managing trade orders")
 public class OrderController {
     private final OrderService orderService;
@@ -27,8 +32,10 @@ public class OrderController {
     public ResponseEntity<OrderResponse> placeOrder(
             @Valid @RequestBody OrderRequest request,
             @RequestHeader("X-User-Id") String userId) {
-        log.info("Placing order for user: {}", userId);
+        log.info("Placing {} {} order for user {}: symbol={}, qty={}, price={}",
+                request.side(), request.orderType(), userId, request.symbol(), request.quantity(), request.price());
         OrderResponse response = orderService.placeOrder(request, UUID.fromString(userId));
+        log.info("Order placed: id={}, status={}, user={}", response.id(), response.status(), userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -37,6 +44,7 @@ public class OrderController {
     public ResponseEntity<OrderResponse> getOrder(
             @PathVariable UUID orderId,
             @RequestHeader("X-User-Id") String userId) {
+        log.debug("Fetching order {} for user {}", orderId, userId);
         OrderResponse response = orderService.getOrderById(orderId, UUID.fromString(userId));
         return ResponseEntity.ok(response);
     }
@@ -45,7 +53,9 @@ public class OrderController {
     @Operation(summary = "Get user orders", description = "Lists all orders for the authenticated user")
     public ResponseEntity<List<OrderResponse>> getUserOrders(
             @RequestHeader("X-User-Id") String userId) {
+        log.debug("Fetching all orders for user {}", userId);
         List<OrderResponse> orders = orderService.getUserOrders(UUID.fromString(userId));
+        log.debug("Returning {} orders for user {}", orders.size(), userId);
         return ResponseEntity.ok(orders);
     }
 
@@ -54,15 +64,19 @@ public class OrderController {
     public ResponseEntity<Void> cancelOrder(
             @PathVariable UUID orderId,
             @RequestHeader("X-User-Id") String userId) {
-        log.info("Cancelling order {} for user: {}", orderId, userId);
+        log.info("Cancelling order {} for user {}", orderId, userId);
         orderService.cancelOrder(orderId, UUID.fromString(userId));
+        log.info("Order {} cancelled by user {}", orderId, userId);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/book/{symbol:.+}")
     @Operation(summary = "Get order book", description = "Retrieves the current buy and sell orders for a symbol")
-    public ResponseEntity<org.serhiileniv.order.service.OrderMatchingEngine.OrderBook> getOrderBook(
-            @PathVariable String symbol) {
+    public ResponseEntity<OrderMatchingEngine.OrderBook> getOrderBook(
+            @PathVariable
+            @Pattern(regexp = "^[A-Z]{3,6}[/-][A-Z]{3,6}$", message = "Symbol must be in format XXX/XXX or XXX-XXX")
+            String symbol) {
+        log.debug("Fetching order book for symbol {}", symbol);
         return ResponseEntity.ok(orderService.getOrderBook(symbol));
     }
 }

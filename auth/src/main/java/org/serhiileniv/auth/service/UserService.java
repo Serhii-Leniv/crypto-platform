@@ -3,6 +3,7 @@ package org.serhiileniv.auth.service;
 import org.springframework.http.HttpHeaders;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.serhiileniv.auth.dto.AuthResponse;
 import org.serhiileniv.auth.dto.UserDto;
 import org.serhiileniv.auth.exception.InvalidCredentialsException;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserService {
     private final UserRepository userRepository;
     private final JwtService jwtService;
@@ -29,7 +31,9 @@ public class UserService {
         if (userDto == null) {
             throw new IllegalArgumentException("User data must not be null");
         }
+        log.info("Registration attempt for email: {}", userDto.email());
         if (userRepository.existsUserByEmail(userDto.email())) {
+            log.warn("Registration failed — email already registered: {}", userDto.email());
             throw new UserAlreadyExistsException(userDto.email());
         }
         String encodedPassword = passwordEncoder.encode(userDto.password());
@@ -38,6 +42,7 @@ public class UserService {
                 .password(encodedPassword)
                 .build();
         user = userRepository.save(user);
+        log.info("User registered successfully: id={}, email={}", user.getId(), user.getEmail());
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
         refreshTokenRepository.save(new RefreshToken(refreshToken, user.getEmail()));
@@ -46,34 +51,47 @@ public class UserService {
 
     @Transactional
     public AuthResponse login(UserDto userDto) {
+        log.info("Login attempt for email: {}", userDto.email());
         User user = userRepository.findUserByEmail(userDto.email())
-                .orElseThrow(InvalidCredentialsException::new);
+                .orElseThrow(() -> {
+                    log.warn("Login failed — email not found: {}", userDto.email());
+                    return new InvalidCredentialsException();
+                });
         if (!passwordEncoder.matches(userDto.password(), user.getPassword())) {
+            log.warn("Login failed — invalid password for email: {}", userDto.email());
             throw new InvalidCredentialsException();
         }
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
         refreshTokenRepository.save(new RefreshToken(refreshToken, user.getEmail()));
+        log.info("Login successful: id={}, email={}", user.getId(), user.getEmail());
         return new AuthResponse(accessToken, refreshToken);
     }
 
     public AuthResponse refreshToken(HttpServletRequest request) {
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.warn("Token refresh failed — missing or malformed Authorization header");
             throw new TokenException("Refresh token is missing");
         }
         String refreshToken = authHeader.substring(7);
         String userEmail = jwtService.extractUsername(refreshToken);
+        log.debug("Token refresh requested for email: {}", userEmail);
         if (userEmail != null) {
             refreshTokenRepository.findById(refreshToken)
-                    .orElseThrow(() -> new TokenException("Refresh token not found or revoked"));
+                    .orElseThrow(() -> {
+                        log.warn("Token refresh failed — token not found or revoked for email: {}", userEmail);
+                        return new TokenException("Refresh token not found or revoked");
+                    });
             User user = userRepository.findUserByEmail(userEmail)
                     .orElseThrow(() -> new InvalidCredentialsException());
             if (jwtService.isTokenValid(refreshToken, user)) {
                 String accessToken = jwtService.generateAccessToken(user);
+                log.info("Access token refreshed for email: {}", userEmail);
                 return new AuthResponse(accessToken, refreshToken);
             }
         }
+        log.warn("Token refresh failed — invalid token for email: {}", userEmail);
         throw new TokenException("Invalid refresh token");
     }
 
@@ -81,7 +99,11 @@ public class UserService {
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String refreshToken = authHeader.substring(7);
+            String userEmail = jwtService.extractUsername(refreshToken);
             refreshTokenRepository.deleteById(refreshToken);
+            log.info("User logged out, refresh token revoked for email: {}", userEmail);
+        } else {
+            log.debug("Logout called with no refresh token in Authorization header");
         }
     }
 }

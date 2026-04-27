@@ -1,10 +1,11 @@
 package org.serhiileniv.auth.service;
 
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import org.serhiileniv.auth.model.User;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class JwtService {
     @Value("${application.security.jwt.secret-key}")
     private String secretKey;
@@ -27,16 +29,20 @@ public class JwtService {
     private long refreshExpiration;
 
     public String generateAccessToken(User user) {
-        Map<String, Object> claims = new HashMap<>();
         if (user.getId() == null) {
             throw new IllegalArgumentException("User ID must not be null for token generation");
         }
+        Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId().toString());
-        return buildToken(claims, user, accessExpiration);
+        String token = buildToken(claims, user, accessExpiration);
+        log.debug("Access token generated for user id={}, email={}", user.getId(), user.getEmail());
+        return token;
     }
 
     public String generateRefreshToken(User user) {
-        return buildToken(new HashMap<>(), user, refreshExpiration);
+        String token = buildToken(new HashMap<>(), user, refreshExpiration);
+        log.debug("Refresh token generated for user id={}, email={}", user.getId(), user.getEmail());
+        return token;
     }
 
     private String buildToken(Map<String, Object> extraClaims, User user, long expiration) {
@@ -50,12 +56,29 @@ public class JwtService {
     }
 
     public String extractUsername(String token) {
-        return extractClaims(token, Claims::getSubject);
+        try {
+            return extractClaims(token, Claims::getSubject);
+        } catch (JwtException e) {
+            log.warn("Failed to extract username from token: {}", e.getMessage());
+            return null;
+        }
     }
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
+        if (username == null) {
+            log.warn("Token validation failed — could not extract username");
+            return false;
+        }
+        if (!username.equals(userDetails.getUsername())) {
+            log.warn("Token validation failed — subject mismatch for user: {}", userDetails.getUsername());
+            return false;
+        }
+        if (isTokenExpired(token)) {
+            log.warn("Token validation failed — token expired for user: {}", userDetails.getUsername());
+            return false;
+        }
+        return true;
     }
 
     public boolean isTokenExpired(String token) {

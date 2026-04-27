@@ -1,8 +1,10 @@
 package org.serhiileniv.order.exception;
 
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -24,6 +26,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(OrderNotFoundException.class)
     public ProblemDetail handleOrderNotFound(OrderNotFoundException ex) {
+        log.warn("Order not found — {}", ex.getMessage());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setType(ORDER_NOT_FOUND_TYPE);
         problem.setTitle("Order Not Found");
@@ -33,6 +36,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(UnauthorizedOrderAccessException.class)
     public ProblemDetail handleUnauthorizedAccess(UnauthorizedOrderAccessException ex) {
+        log.warn("Unauthorized order access — {}", ex.getMessage());
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
         problem.setType(ACCESS_DENIED_TYPE);
         problem.setTitle("Access Denied");
@@ -43,8 +47,22 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
         String details = ex.getBindingResult().getFieldErrors().stream()
-                .map(e -> e.getField() + ": " + e.getDefaultMessage())
+                .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining(", "));
+        log.warn("Request body validation failed — {}", details);
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, details);
+        problem.setType(VALIDATION_ERROR_TYPE);
+        problem.setTitle("Validation Error");
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ProblemDetail handleConstraintViolation(ConstraintViolationException ex) {
+        String details = ex.getConstraintViolations().stream()
+                .map(cv -> cv.getPropertyPath() + ": " + cv.getMessage())
+                .collect(Collectors.joining(", "));
+        log.warn("Parameter validation failed — {}", details);
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, details);
         problem.setType(VALIDATION_ERROR_TYPE);
         problem.setTitle("Validation Error");
