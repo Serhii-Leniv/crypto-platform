@@ -18,6 +18,8 @@ public class OrderMatchedEvent {
     private String symbol;
     private BigDecimal price;
     private BigDecimal quantity;
+    private BigDecimal buyerLimitPrice;
+    private BigDecimal sellerLimitPrice;
     private UUID buyerUserId;
     private UUID sellerUserId;
     private LocalDateTime timestamp;

@@ -1,8 +1,16 @@
 [config]
-model = "gemini/gemini-1.5-flash"
-fallback_models = ["gemini/gemini-1.5-flash"]
+model = "gemini/gemini-2.0-flash"
+fallback_models = ["gemini/gemini-2.0-flash-lite", "gemini/gemini-1.5-flash"]
 
 [github_action_config]
 auto_review   = true
 auto_describe = true
 auto_improve  = true
+pr_actions = ["opened", "reopened", "ready_for_review", "synchronize"]
+
+[pr_reviewer]
+require_score_label = false
+inline_code_comments = true
+
+[pr_code_suggestions]
+num_code_suggestions = 4

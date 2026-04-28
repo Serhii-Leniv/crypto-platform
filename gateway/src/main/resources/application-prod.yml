@@ -1,0 +1,5 @@
+logging:
+  level:
+    root: WARN
+    org.serhiileniv: INFO
+    org.springframework: WARN

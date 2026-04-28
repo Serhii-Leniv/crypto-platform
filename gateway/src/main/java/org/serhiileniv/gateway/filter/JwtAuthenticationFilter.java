@@ -16,6 +16,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 @Component
 @Slf4j
@@ -44,6 +45,11 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                 String userId = claims.get("userId", String.class);
                 if (userId == null) {
                     return onError(exchange, "userId claim missing in token", HttpStatus.UNAUTHORIZED);
+                }
+                try {
+                    UUID.fromString(userId);
+                } catch (IllegalArgumentException e) {
+                    return onError(exchange, "Invalid userId format in token", HttpStatus.UNAUTHORIZED);
                 }
                 ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                         .header("X-User-Id", userId)

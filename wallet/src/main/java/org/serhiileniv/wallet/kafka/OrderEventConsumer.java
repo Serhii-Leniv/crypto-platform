@@ -97,21 +97,42 @@ public class OrderEventConsumer {
         walletService.processTrade(event.getBuyerUserId(), quoteCurrency, quoteAmount, event.getTradeId(), false);
         walletService.processTrade(event.getSellerUserId(), baseCurrency, baseAmount, event.getTradeId(), false);
         walletService.processTrade(event.getSellerUserId(), quoteCurrency, quoteAmount, event.getTradeId(), true);
+        
+        if (event.getBuyerLimitPrice() != null) {
+            BigDecimal slippage = event.getBuyerLimitPrice().subtract(event.getPrice()).multiply(event.getQuantity());
+            if (slippage.compareTo(BigDecimal.ZERO) > 0) {
+                walletService.unlockFunds(event.getBuyerUserId(), quoteCurrency, slippage, event.getTradeId());
+                log.info("Unlocked slippage: {} {} for user {} on trade {}", 
+                         slippage, quoteCurrency, event.getBuyerUserId(), event.getTradeId());
+            }
+        }
+        
         processedEventRepository.save(new ProcessedEvent(event.getTradeId(), "ORDER_MATCHED"));
         log.info("OrderMatchedEvent processed: {}", event.getTradeId());
     }
 
+    private static final java.util.regex.Pattern SYMBOL_PATTERN =
+            java.util.regex.Pattern.compile("^[A-Z]{3,6}[/-][A-Z]{3,6}$");
+
     private String[] extractCurrencies(String symbol) {
+        validateSymbol(symbol);
         return symbol.split("[/-]");
     }
 
     private String extractQuoteCurrency(String symbol) {
+        validateSymbol(symbol);
         String[] parts = symbol.split("[/-]");
-        return parts.length > 1 ? parts[1] : "USDT";
+        return parts[1];
     }
 
     private String extractBaseCurrency(String symbol) {
-        String[] parts = symbol.split("[/-]");
-        return parts[0];
+        validateSymbol(symbol);
+        return symbol.split("[/-]")[0];
+    }
+
+    private void validateSymbol(String symbol) {
+        if (symbol == null || !SYMBOL_PATTERN.matcher(symbol).matches()) {
+            throw new IllegalArgumentException("Invalid trading symbol: " + symbol);
+        }
     }
 }

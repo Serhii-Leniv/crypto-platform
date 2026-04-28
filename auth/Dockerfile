@@ -1,31 +1,18 @@
-# Етап 1: Збірка (Builder)
-FROM eclipse-temurin:21-jdk-alpine AS builder
-
-# Встановлюємо Maven
-RUN apk add --no-cache maven
+FROM maven:3.9-eclipse-temurin-21-alpine AS builder
 
 WORKDIR /build
 
-# Копіюємо батьківський POM з кореня проекту
 COPY pom.xml ./
-
-# Copy auth module
 COPY auth ./auth
 
-# Завантажуємо залежності та збираємо проект
 WORKDIR /build/auth
 RUN mvn dependency:go-offline -B
 RUN mvn clean package -DskipTests
 
-# Етап 2: Запуск (Runtime)
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-
-# Копіюємо зібраний JAR з першого етапу
 COPY --from=builder /build/auth/target/*.jar app.jar
-
-# Відкриваємо порт
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
 EXPOSE 8081
-
-# Запускаємо додаток
 ENTRYPOINT ["java", "-jar", "app.jar"]

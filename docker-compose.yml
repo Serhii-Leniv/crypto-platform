@@ -6,15 +6,15 @@ services:
     container_name: postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: crypto_user
-      POSTGRES_PASSWORD: crypto_password
+      POSTGRES_USER: ${POSTGRES_USER:-crypto_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: auth_db
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U crypto_user -d auth_db" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crypto_user} -d auth_db" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -77,12 +77,46 @@ services:
     container_name: pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@crypto.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@crypto.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
     ports:
       - "5050:80"
     depends_on:
       - postgres
+    networks:
+      - crypto-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - crypto-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
     networks:
       - crypto-network
 
@@ -92,16 +126,17 @@ services:
       dockerfile: auth/Dockerfile
     container_name: auth-service
     restart: on-failure
+    stop_grace_period: 35s
     ports:
       - "8081:8081"
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
-      SPRING_DATASOURCE_USERNAME: crypto_user
-      SPRING_DATASOURCE_PASSWORD: crypto_password
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crypto_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis-cache
       SPRING_DATA_REDIS_PORT: 6379
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-this-is-a-very-secret-key-that-is-at-least-thirty-two-bytes-long-!!}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -116,15 +151,16 @@ services:
       dockerfile: order-matching/Dockerfile
     container_name: order-matching-service
     restart: on-failure
+    stop_grace_period: 35s
     ports:
       - "8082:8082"
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/order_db
-      SPRING_DATASOURCE_USERNAME: crypto_user
-      SPRING_DATASOURCE_PASSWORD: crypto_password
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crypto_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-this-is-a-very-secret-key-that-is-at-least-thirty-two-bytes-long-!!}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -139,15 +175,16 @@ services:
       dockerfile: wallet/Dockerfile
     container_name: wallet-service
     restart: on-failure
+    stop_grace_period: 35s
     ports:
       - "8083:8083"
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/wallet_db
-      SPRING_DATASOURCE_USERNAME: crypto_user
-      SPRING_DATASOURCE_PASSWORD: crypto_password
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crypto_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-this-is-a-very-secret-key-that-is-at-least-thirty-two-bytes-long-!!}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,13 +199,14 @@ services:
       dockerfile: market-data/Dockerfile
     container_name: market-data-service
     restart: on-failure
+    stop_grace_period: 35s
     ports:
       - "8084:8084"
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/market_db
-      SPRING_DATASOURCE_USERNAME: crypto_user
-      SPRING_DATASOURCE_PASSWORD: crypto_password
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crypto_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis-market
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
@@ -188,20 +226,26 @@ services:
       dockerfile: gateway/Dockerfile
     container_name: api-gateway
     restart: on-failure
+    stop_grace_period: 35s
     ports:
       - "8080:8080"
     environment:
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-this-is-a-very-secret-key-that-is-at-least-thirty-two-bytes-long-!!}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       AUTH_SERVICE_URL: http://auth-service:8081
       ORDER_SERVICE_URL: http://order-service:8082
       WALLET_SERVICE_URL: http://wallet-service:8083
       MARKET_SERVICE_URL: http://market-service:8084
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      SPRING_DATA_REDIS_HOST: redis-cache
+      SPRING_DATA_REDIS_PORT: 6379
       SPRING_CLOUD_COMPATIBILITY_VERIFIER_ENABLED: "false"
     depends_on:
       - auth-service
       - order-service
       - wallet-service
       - market-service
+      - redis-cache
     networks:
       - crypto-network
 
@@ -222,7 +266,8 @@ volumes:
   postgres_data:
   redis_auth_data:
   redis_market_data:
-
+  prometheus_data:
+  grafana_data:
 
 networks:
   crypto-network:

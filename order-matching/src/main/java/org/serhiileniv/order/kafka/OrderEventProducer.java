@@ -5,6 +5,8 @@ import org.serhiileniv.order.kafka.event.OrderCancelledEvent;
 import org.serhiileniv.order.kafka.event.OrderMatchedEvent;
 import org.serhiileniv.order.kafka.event.OrderPlacedEvent;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
@@ -12,6 +14,8 @@ import org.springframework.stereotype.Component;
 public class OrderEventProducer {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private static final String ORDER_EVENTS_TOPIC = "order-events";
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void sendOrderPlacedEvent(OrderPlacedEvent event) {
         log.info("Sending OrderPlacedEvent for order: {}", event.getOrderId());
         kafkaTemplate.send(ORDER_EVENTS_TOPIC, event.getOrderId().toString(), event)
@@ -23,6 +27,8 @@ public class OrderEventProducer {
                     }
                 });
     }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void sendOrderMatchedEvent(OrderMatchedEvent event) {
         log.info("Sending OrderMatchedEvent for trade: {}", event.getTradeId());
         kafkaTemplate.send(ORDER_EVENTS_TOPIC, event.getTradeId().toString(), event)
@@ -34,6 +40,8 @@ public class OrderEventProducer {
                     }
                 });
     }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void sendOrderCancelledEvent(OrderCancelledEvent event) {
         log.info("Sending OrderCancelledEvent for order: {}", event.getOrderId());
         kafkaTemplate.send(ORDER_EVENTS_TOPIC, event.getOrderId().toString(), event)
