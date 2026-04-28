@@ -101,4 +101,36 @@ public class OrderService {
         public OrderMatchingEngine.OrderBook getOrderBook(String symbol) {
                 return matchingEngine.getOrderBook(symbol);
         }
+
+        @Transactional(readOnly = true)
+        public List<OrderResponse> findAllOrders() {
+                return orderRepository.findAll().stream()
+                                .map(OrderResponse::fromEntity)
+                                .collect(Collectors.toList());
+        }
+
+        @Transactional
+        public void adminCancelOrder(UUID orderId) {
+                Order order = orderRepository.findById(orderId)
+                                .orElseThrow(() -> new OrderNotFoundException(orderId));
+                if (order.getStatus() == OrderStatus.FILLED) {
+                        throw new IllegalStateException("Cannot cancel a filled order");
+                }
+                if (order.getStatus() == OrderStatus.CANCELLED) {
+                        throw new IllegalStateException("Order is already cancelled");
+                }
+                order.setStatus(OrderStatus.CANCELLED);
+                orderRepository.save(order);
+                OrderCancelledEvent cancelledEvent = new OrderCancelledEvent(
+                                order.getId(),
+                                order.getUserId(),
+                                order.getSymbol(),
+                                order.getSide(),
+                                order.getRemainingQuantity(),
+                                order.getPrice(),
+                                "Cancelled by admin",
+                                LocalDateTime.now());
+                eventProducer.sendOrderCancelledEvent(cancelledEvent);
+                log.info("Admin cancelled order: {}", orderId);
+        }
 }

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './auth/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import PrivateRoute from './auth/PrivateRoute';
+import AdminRoute from './auth/AdminRoute';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -11,6 +12,9 @@ import PlaceOrderPage from './pages/PlaceOrderPage';
 import MyOrdersPage from './pages/MyOrdersPage';
 import WalletsPage from './pages/WalletsPage';
 import TransactionsPage from './pages/TransactionsPage';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
+import AdminTransactionsPage from './pages/admin/AdminTransactionsPage';
+import AdminOrdersPage from './pages/admin/AdminOrdersPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +42,13 @@ export default function App() {
                 <Route path="/my-orders" element={<MyOrdersPage />} />
                 <Route path="/wallets" element={<WalletsPage />} />
                 <Route path="/transactions" element={<TransactionsPage />} />
+              </Route>
+            </Route>
+            <Route element={<AdminRoute />}>
+              <Route element={<Layout />}>
+                <Route path="/admin/users" element={<AdminUsersPage />} />
+                <Route path="/admin/transactions" element={<AdminTransactionsPage />} />
+                <Route path="/admin/orders" element={<AdminOrdersPage />} />
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

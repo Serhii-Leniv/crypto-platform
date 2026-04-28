@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
-const links = [
+const userLinks = [
   { to: '/dashboard', label: 'Market Data' },
   { to: '/orderbook', label: 'Order Book' },
   { to: '/place-order', label: 'Place Order' },
@@ -11,8 +11,14 @@ const links = [
   { to: '/transactions', label: 'Transactions' },
 ];
 
+const adminLinks = [
+  { to: '/admin/users', label: 'Users' },
+  { to: '/admin/transactions', label: 'All Transactions' },
+  { to: '/admin/orders', label: 'All Orders' },
+];
+
 export default function Layout() {
-  const { logout } = useAuth();
+  const { logout, isAdmin } = useAuth();
   const [open, setOpen] = useState(false);
 
   return (
@@ -42,8 +48,8 @@ export default function Layout() {
             ✕
           </button>
         </div>
-        <nav className="flex-1 px-3 space-y-1">
-          {links.map(({ to, label }) => (
+        <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
+          {userLinks.map(({ to, label }) => (
             <NavLink
               key={to}
               to={to}
@@ -59,6 +65,30 @@ export default function Layout() {
               {label}
             </NavLink>
           ))}
+
+          {isAdmin && (
+            <>
+              <div className="pt-4 pb-1 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#f0b90b' }}>
+                Admin
+              </div>
+              {adminLinks.map(({ to, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={() => setOpen(false)}
+                  className={({ isActive }) =>
+                    `block px-3 py-2 rounded text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'text-yellow-400'
+                        : 'text-gray-400 hover:text-gray-100 hover:bg-gray-700'
+                    }`
+                  }
+                >
+                  {label}
+                </NavLink>
+              ))}
+            </>
+          )}
         </nav>
         <div className="px-3 pb-5">
           <button

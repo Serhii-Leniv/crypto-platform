@@ -128,6 +128,14 @@ public class WalletService {
         return transactionRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
+    public List<Wallet> findAllWallets() {
+        return walletRepository.findAll();
+    }
+
+    public List<Transaction> findAllTransactions() {
+        return transactionRepository.findAll();
+    }
+
     private Wallet getOrCreateWalletLocked(UUID userId, String currency) {
         return walletRepository.findByUserIdAndCurrencyWithLock(userId, currency)
                 .orElseGet(() -> {

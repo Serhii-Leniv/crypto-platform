@@ -45,8 +45,14 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                 if (userId == null) {
                     return onError(exchange, "userId claim missing in token", HttpStatus.UNAUTHORIZED);
                 }
+                String role = claims.get("role", String.class);
+                String path = request.getPath().value();
+                if (path.startsWith("/api/v1/admin/") && !"ADMIN".equals(role)) {
+                    return onError(exchange, "Forbidden: admin access required", HttpStatus.FORBIDDEN);
+                }
                 ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                         .header("X-User-Id", userId)
+                        .header("X-User-Role", role != null ? role : "USER")
                         .build();
                 return chain.filter(exchange.mutate().request(modifiedRequest).build());
             } catch (Exception e) {

@@ -77,3 +77,17 @@ export interface TransactionResponse {
   description: string | null;
   createdAt: string;
 }
+
+export type UserRole = 'USER' | 'ADMIN';
+
+export interface UserAdminResponse {
+  id: string;
+  email: string;
+  role: UserRole;
+}
+
+export interface AdminDepositRequest {
+  userId: string;
+  currency: string;
+  amount: string;
+}
