@@ -1,0 +1,115 @@
+# Cursor Rules — Trading Exchange Platform
+
+## Project Overview
+Microservices crypto trading platform. Maven multi-module parent `crypto-exchange` with five Spring Boot 3 / Java 21 services and a React 18 + TypeScript frontend.
+
+## Module Structure
+```
+auth/           → Authentication Service     (port 8081, org.serhiileniv.auth)
+gateway/        → API Gateway                (port 8080, org.serhiileniv.gateway)
+order-matching/ → Order Matching Service     (port 8082, org.serhiileniv.order)
+wallet/         → Wallet Service             (port 8083, org.serhiileniv.wallet)
+market-data/    → Market Data Service        (port 8084, org.serhiileniv.marketdata)
+frontend/       → React SPA                  (port 3000, exchange-ui)
+```
+
+## Naming Conventions
+
+### Java
+- Packages: `org.serhiileniv.<module>` — no `crypto` prefix inside packages
+- Main classes: `AuthApplication`, `GatewayApplication`, `OrderMatchingApplication`, `WalletApplication`, `MarketDataApplication`
+- Services: `UserService`, `WalletService`, `OrderService`, `MarketDataService` — never prefix with module name
+- Repositories: `UserRepository`, `WalletRepository`, `OrderRepository` — extend `JpaRepository`
+- DTOs: `AuthResponse`, `WalletResponse`, `OrderRequest`, `OrderResponse` — suffix with Request/Response
+- Events: `OrderPlacedEvent`, `OrderMatchedEvent`, `OrderCancelledEvent` — always include `eventType` field
+- Controllers: `AuthController`, `WalletController`, `OrderController` — prefix `@RequestMapping("/api/v1/<resource>")`
+
+### Spring app names (application.properties)
+- `auth-service`, `api-gateway`, `order-matching-service`, `wallet-service`, `market-data-service`
+
+### Kafka
+- Topic: `order-events`
+- Consumer groups: `wallet-group`, `market-data-group`
+- Event discrimination: `eventType` field (STRING) — `ORDER_PLACED` | `ORDER_MATCHED` | `ORDER_CANCELLED`
+
+### Docker containers
+- `auth-service`, `api-gateway`, `order-matching-service`, `wallet-service`, `market-data-service`
+- Infrastructure: `postgres`, `redis-auth`, `redis-market`, `kafka`, `zookeeper`, `pgadmin`
+
+### Frontend (TypeScript/React)
+- Components: PascalCase — `PlaceOrderPage`, `OrderBookPage`, `ToastContext`
+- API functions: camelCase — `placeOrder`, `getWallets`, `cancelOrder`
+- Types: PascalCase interfaces — `OrderResponse`, `WalletResponse`, `MarketDataResponse`
+- Hooks: `use` prefix — `useToast`, `useAuth`
+
+## Architecture Rules
+
+### Gateway
+- ALL requests enter through gateway (port 8080)
+- JWT validated by `JwtAuthenticationFilter` before forwarding
+- `userId` extracted from JWT claim and injected as `X-User-Id` header
+- Services MUST read user identity from `X-User-Id`, never re-parse JWT (except wallet)
+- Public routes: `/api/v1/auth/**`, `/api/v1/market-data/**`
+
+### Auth Service
+- BCrypt password hashing — never store plaintext
+- Access token: 15 min TTL, contains `userId` claim
+- Refresh token: 7 days TTL, stored in Redis (`redis-cache`), revocable on logout
+- JWT secret key shared across: gateway, auth, order-matching, wallet — via `JWT_SECRET_KEY` env var
+
+### Order Matching
+- Order placement sequence: persist → publish OrderPlacedEvent → matchOrder() → publish OrderMatchedEvent (if matched)
+- Matching engine uses pessimistic write lock on counterparty order queries
+- BUY matches when buyPrice >= sellPrice; SELL matches when sellPrice <= buyPrice
+- MARKET orders match any counterparty price
+
+### Wallet (Saga Pattern)
+- `ORDER_PLACED` → lock funds (quote currency for BUY, base for SELL)
+- `ORDER_MATCHED` → settle trade: debitLocked from payer, deposit to receiver
+- `ORDER_CANCELLED` → unlock funds
+- Idempotency: check `ProcessedEvent` table before processing any Kafka event
+- Symbol parsing: `BTC-USDT` splits on `/` or `-` → [base, quote]
+
+### Market Data
+- Consumes `ORDER_MATCHED` events only
+- Updates: `lastPrice`, `high24h`, `low24h`, `volume24h`, `tradeCount24h`
+- `priceChangePercent24h` = `(lastPrice - openPrice24h) / openPrice24h * 100`
+- Cached in Redis (`redis-market`) with 10-minute TTL; evicted on every trade
+- Daily reset at midnight UTC via `@Scheduled(cron = "0 0 0 * * *")`
+
+## Code Style
+
+### Java
+- Use Lombok: `@Data`, `@Builder`, `@RequiredArgsConstructor`, `@Slf4j`
+- Lombok before MapStruct in annotationProcessorPaths (order matters)
+- `@Transactional` on service methods that write to DB
+- Log with `log.info()`/`log.error()` — never `System.out.println`
+- Return types: use DTOs from controllers, never expose entities directly
+
+### Testing
+- Unit tests: Mockito mocks only — no embedded DB, no Testcontainers
+- Smoke tests (`*SmokeTest`): `@SpringBootTest` + `@MockBean` for infrastructure
+- Always set `eventType` field in Kafka event test fixtures
+
+### Frontend
+- Access token: store in JS memory only (tokenStore), never localStorage — XSS mitigation
+- Refresh token: localStorage — survives page refresh
+- API calls: always via `apiClient` (Axios instance with interceptors)
+- Errors: use `err.userMessage` (set by interceptor) over raw `err.message`
+- Mutations: invalidate related queries on success
+
+## Build Commands
+```bash
+mvn -B clean verify                              # full build + tests
+mvn -B clean package -DskipTests                # build only
+mvn -B test -pl wallet                           # single module tests
+docker compose up --build                        # full stack
+docker compose config                            # validate compose file
+```
+
+## Key Invariants — Never Break These
+1. `JWT_SECRET_KEY` must be identical in gateway, auth, order-matching, wallet
+2. All Kafka events must include `eventType` field — consumers switch on it
+3. Wallet events must be idempotent — always check ProcessedEvent before acting
+4. Lombok must come before MapStruct in annotationProcessorPaths
+5. `ddl-auto=update` — no manual schema migrations, Hibernate manages schema

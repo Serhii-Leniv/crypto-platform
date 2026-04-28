@@ -15,6 +15,7 @@ import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.model.OrderType;
 import org.serhiileniv.order.repository.OrderRepository;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -33,7 +34,7 @@ class OrderServiceTest {
     @Mock
     private OrderMatchingEngine matchingEngine;
     @Mock
-    private OrderEventProducer eventProducer;
+    private ApplicationEventPublisher applicationEventPublisher;
 
     @InjectMocks
     private OrderService orderService;
@@ -71,7 +72,7 @@ class OrderServiceTest {
         assertNotNull(response);
         assertEquals(orderId, response.id());
         verify(orderRepository).save(any(Order.class));
-        verify(eventProducer).sendOrderPlacedEvent(any());
+        verify(applicationEventPublisher).publishEvent(any(Object.class));
         verify(matchingEngine).matchOrder(any());
     }
 
@@ -83,7 +84,7 @@ class OrderServiceTest {
 
         assertEquals(OrderStatus.CANCELLED, order.getStatus());
         verify(orderRepository).save(order);
-        verify(eventProducer).sendOrderCancelledEvent(any());
+        verify(applicationEventPublisher).publishEvent(any(Object.class));
     }
 
     @Test

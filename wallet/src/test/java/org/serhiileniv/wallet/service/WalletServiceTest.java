@@ -53,7 +53,7 @@ class WalletServiceTest {
 
         walletService.deposit(userId, currency, new BigDecimal("500"));
 
-        assertEquals(new BigDecimal("1500"), wallet.getBalance());
+        assertEquals(0, new BigDecimal("1500").compareTo(wallet.getBalance()));
         verify(walletRepository).save(wallet);
         verify(transactionRepository).save(any());
     }
@@ -64,7 +64,7 @@ class WalletServiceTest {
 
         walletService.withdraw(userId, currency, new BigDecimal("500"));
 
-        assertEquals(new BigDecimal("500"), wallet.getBalance());
+        assertEquals(0, new BigDecimal("500").compareTo(wallet.getBalance()));
         verify(walletRepository).save(wallet);
     }
 
@@ -82,9 +82,9 @@ class WalletServiceTest {
 
         walletService.lockFunds(userId, currency, new BigDecimal("100"), UUID.randomUUID());
 
-        assertEquals(new BigDecimal("1000"), wallet.getBalance()); // Total balance stays same
-        assertEquals(new BigDecimal("900"), wallet.getAvailableBalance()); // Available decreases
-        assertEquals(new BigDecimal("100"), wallet.getLockedBalance());
+        assertEquals(0, new BigDecimal("1000").compareTo(wallet.getBalance())); // Total balance stays same
+        assertEquals(0, new BigDecimal("900").compareTo(wallet.getAvailableBalance())); // Available decreases
+        assertEquals(0, new BigDecimal("100").compareTo(wallet.getLockedBalance()));
     }
 
     @Test
@@ -95,9 +95,9 @@ class WalletServiceTest {
         walletService.unlockFunds(userId, currency, new BigDecimal("100"),
                 UUID.fromString("00000000-0000-0000-0000-000000000000"));
 
-        assertEquals(new BigDecimal("1000"), wallet.getBalance());
-        assertEquals(new BigDecimal("1000"), wallet.getAvailableBalance());
-        assertEquals(BigDecimal.ZERO, wallet.getLockedBalance());
+        assertEquals(0, new BigDecimal("1000").compareTo(wallet.getBalance()));
+        assertEquals(0, new BigDecimal("1000").compareTo(wallet.getAvailableBalance()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(wallet.getLockedBalance()));
     }
 
     @Test
@@ -106,7 +106,7 @@ class WalletServiceTest {
 
         walletService.processTrade(userId, currency, new BigDecimal("100"), UUID.randomUUID(), true);
 
-        assertEquals(new BigDecimal("1100"), wallet.getBalance());
+        assertEquals(0, new BigDecimal("1100").compareTo(wallet.getBalance()));
         verify(transactionRepository).save(any());
     }
 
@@ -117,8 +117,8 @@ class WalletServiceTest {
 
         walletService.processTrade(userId, currency, new BigDecimal("100"), UUID.randomUUID(), false);
 
-        assertEquals(BigDecimal.ZERO, wallet.getLockedBalance());
-        assertEquals(new BigDecimal("900"), wallet.getBalance()); // Total balance decreases on sell
+        assertEquals(0, BigDecimal.ZERO.compareTo(wallet.getLockedBalance()));
+        assertEquals(0, new BigDecimal("900").compareTo(wallet.getBalance())); // Total balance decreases on sell
         verify(transactionRepository).save(any());
     }
 }
