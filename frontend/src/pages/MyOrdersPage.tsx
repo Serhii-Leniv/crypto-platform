@@ -4,20 +4,47 @@ import Spinner from '../components/Spinner';
 import type { OrderResponse, OrderStatus } from '../types';
 
 function StatusBadge({ status }: { status: OrderStatus }) {
-  const map: Record<OrderStatus, string> = {
-    PENDING: '#f0b90b',
-    PARTIALLY_FILLED: '#3b82f6',
-    FILLED: '#0ecb81',
-    CANCELLED: '#6b7280',
+  const config: Record<OrderStatus, { bg: string; color: string }> = {
+    PENDING:          { bg: 'rgba(240,185,11,0.12)',  color: '#f0b90b' },
+    PARTIALLY_FILLED: { bg: 'rgba(96,165,250,0.12)',  color: '#60a5fa' },
+    FILLED:           { bg: 'rgba(14,203,129,0.12)',  color: '#0ecb81' },
+    CANCELLED:        { bg: 'rgba(107,114,128,0.12)', color: '#9ca3af' },
   };
+  const c = config[status];
   return (
     <span
-      className="px-2 py-0.5 rounded text-xs font-medium"
-      style={{ background: map[status] + '22', color: map[status] }}
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap"
+      style={{ background: c.bg, color: c.color }}
     >
+      <span
+        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+        style={{ background: c.color }}
+      />
       {status.replace('_', ' ')}
     </span>
   );
+}
+
+function SideBadge({ side }: { side: 'BUY' | 'SELL' }) {
+  const isBuy = side === 'BUY';
+  return (
+    <span
+      className="inline-flex px-2 py-0.5 rounded text-xs font-semibold"
+      style={{
+        background: isBuy ? 'rgba(14,203,129,0.12)' : 'rgba(246,70,93,0.12)',
+        color:      isBuy ? '#0ecb81' : '#f6465d',
+      }}
+    >
+      {side}
+    </span>
+  );
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
 }
 
 export default function MyOrdersPage() {
@@ -37,16 +64,29 @@ export default function MyOrdersPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-100 mb-6">My Orders</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold" style={{ color: '#e2e8f0' }}>My Orders</h2>
+        {data && data.length > 0 && (
+          <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'rgba(240,185,11,0.1)', color: '#f0b90b' }}>
+            {data.length} order{data.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
       {isLoading && <Spinner />}
-      {error && <p className="text-red-400">Failed to load orders.</p>}
+      {error && <p className="text-sm" style={{ color: '#f6465d' }}>Failed to load orders.</p>}
+
       {data && (
         <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #3c4049' }}>
           <table className="w-full text-sm">
             <thead>
               <tr style={{ background: '#252930', borderBottom: '1px solid #3c4049' }}>
                 {['ID', 'Symbol', 'Type', 'Side', 'Price', 'Qty', 'Filled', 'Status', 'Date', ''].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                  <th
+                    key={h}
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap"
+                    style={{ color: '#6b7280' }}
+                  >
                     {h}
                   </th>
                 ))}
@@ -55,35 +95,61 @@ export default function MyOrdersPage() {
             <tbody>
               {data.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
-                    No orders yet.
+                  <td colSpan={10} className="px-4 py-10 text-center text-sm" style={{ color: '#6b7280' }}>
+                    No orders yet. Head to Place Order to get started.
                   </td>
                 </tr>
               )}
               {data.map((o) => (
-                <tr key={o.id} style={{ borderBottom: '1px solid #2a2d35' }} className="hover:bg-gray-800">
-                  <td className="px-4 py-2 text-gray-500 font-mono text-xs">{o.id.slice(0, 8)}…</td>
-                  <td className="px-4 py-2 font-semibold text-gray-100">{o.symbol}</td>
-                  <td className="px-4 py-2 text-gray-300">{o.orderType}</td>
-                  <td className="px-4 py-2">
-                    <span style={{ color: o.side === 'BUY' ? '#0ecb81' : '#f6465d' }}>{o.side}</span>
+                <tr
+                  key={o.id}
+                  style={{ borderBottom: '1px solid #2a2d35' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(255,255,255,0.025)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}
+                >
+                  <td className="px-4 py-3 font-mono text-xs" style={{ color: '#4b5563' }}>
+                    {o.id.slice(0, 8)}…
                   </td>
-                  <td className="px-4 py-2 font-mono text-gray-300">
-                    {o.price ? `$${parseFloat(o.price).toFixed(2)}` : '—'}
+                  <td className="px-4 py-3">
+                    <span
+                      className="px-2 py-0.5 rounded text-xs font-semibold"
+                      style={{ background: 'rgba(240,185,11,0.08)', color: '#f0b90b' }}
+                    >
+                      {o.symbol}
+                    </span>
                   </td>
-                  <td className="px-4 py-2 font-mono text-gray-300">{parseFloat(o.quantity).toFixed(6)}</td>
-                  <td className="px-4 py-2 font-mono text-gray-500">{parseFloat(o.filledQuantity).toFixed(6)}</td>
-                  <td className="px-4 py-2"><StatusBadge status={o.status} /></td>
-                  <td className="px-4 py-2 text-gray-500 text-xs whitespace-nowrap">
-                    {new Date(o.createdAt).toLocaleString()}
+                  <td className="px-4 py-3 text-xs" style={{ color: '#9ca3af' }}>{o.orderType}</td>
+                  <td className="px-4 py-3">
+                    <SideBadge side={o.side} />
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="px-4 py-3 font-mono text-xs" style={{ color: '#e2e8f0' }}>
+                    {o.price ? `$${parseFloat(o.price).toFixed(2)}` : <span style={{ color: '#4b5563' }}>—</span>}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs" style={{ color: '#9ca3af' }}>
+                    {parseFloat(o.quantity).toFixed(6)}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs" style={{ color: '#4b5563' }}>
+                    {parseFloat(o.filledQuantity).toFixed(6)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={o.status} />
+                  </td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: '#6b7280' }}>
+                    {fmtDate(o.createdAt)}
+                  </td>
+                  <td className="px-4 py-3">
                     {canCancel(o.status) && (
                       <button
                         onClick={() => cancelMutation.mutate(o.id)}
                         disabled={cancelMutation.isPending}
-                        className="px-2 py-1 rounded text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
-                        style={{ border: '1px solid #f6465d33' }}
+                        className="px-2.5 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
+                        style={{
+                          color: '#f6465d',
+                          border: '1px solid rgba(246,70,93,0.25)',
+                          background: 'transparent',
+                        }}
+                        onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = 'rgba(246,70,93,0.08)'}
+                        onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = 'transparent'}
                       >
                         Cancel
                       </button>
