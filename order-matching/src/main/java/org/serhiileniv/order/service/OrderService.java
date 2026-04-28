@@ -11,6 +11,7 @@ import org.serhiileniv.order.kafka.event.OrderPlacedEvent;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.repository.OrderRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
@@ -24,7 +25,7 @@ import java.util.stream.Collectors;
 public class OrderService {
         private final OrderRepository orderRepository;
         private final OrderMatchingEngine matchingEngine;
-        private final OrderEventProducer eventProducer;
+        private final ApplicationEventPublisher applicationEventPublisher;
 
         @Transactional
         public OrderResponse placeOrder(OrderRequest request, UUID userId) {
@@ -48,7 +49,7 @@ public class OrderService {
                                 order.getPrice(),
                                 order.getQuantity(),
                                 LocalDateTime.now());
-                eventProducer.sendOrderPlacedEvent(placedEvent);
+                applicationEventPublisher.publishEvent(placedEvent);
                 matchingEngine.matchOrder(order);
                 UUID savedOrderId = order.getId();
                 order = orderRepository.findById(savedOrderId)
@@ -78,7 +79,7 @@ public class OrderService {
                                 order.getPrice(),
                                 "Cancelled by user",
                                 LocalDateTime.now());
-                eventProducer.sendOrderCancelledEvent(cancelledEvent);
+                applicationEventPublisher.publishEvent(cancelledEvent);
                 log.info("Order cancelled: {}", orderId);
         }
 

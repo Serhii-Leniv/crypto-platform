@@ -1,0 +1,101 @@
+# Windsurf Rules — Trading Exchange Platform
+
+## Project Overview
+Microservices crypto trading platform. Maven multi-module parent `crypto-exchange` with five Spring Boot 3 / Java 21 services and a React 18 + TypeScript frontend.
+
+## Module Structure
+```
+auth/           → Authentication Service     (port 8081, org.serhiileniv.auth)
+gateway/        → API Gateway                (port 8080, org.serhiileniv.gateway)
+order-matching/ → Order Matching Service     (port 8082, org.serhiileniv.order)
+wallet/         → Wallet Service             (port 8083, org.serhiileniv.wallet)
+market-data/    → Market Data Service        (port 8084, org.serhiileniv.marketdata)
+frontend/       → React SPA                  (port 3000, exchange-ui)
+```
+
+## Naming Conventions
+
+### Java
+- Packages: `org.serhiileniv.<module>` — no `crypto` prefix inside packages
+- Main classes: `AuthApplication`, `GatewayApplication`, `OrderMatchingApplication`, `WalletApplication`, `MarketDataApplication`
+- Services: `UserService`, `WalletService`, `OrderService`, `MarketDataService`
+- Repositories: extend `JpaRepository`, suffix `Repository`
+- DTOs: suffix `Request` or `Response` — e.g. `OrderRequest`, `WalletResponse`
+- Events: `OrderPlacedEvent`, `OrderMatchedEvent`, `OrderCancelledEvent` — always include `eventType` STRING field
+- Controllers: `@RequestMapping("/api/v1/<resource>")` prefix
+
+### Spring app names
+- `auth-service`, `api-gateway`, `order-matching-service`, `wallet-service`, `market-data-service`
+
+### Kafka
+- Topic: `order-events`
+- Consumer groups: `wallet-group`, `market-data-group`
+- `eventType` values: `ORDER_PLACED`, `ORDER_MATCHED`, `ORDER_CANCELLED`
+
+### Docker containers
+- Services: `auth-service`, `api-gateway`, `order-matching-service`, `wallet-service`, `market-data-service`
+- Infrastructure: `postgres`, `redis-auth`, `redis-market`, `kafka`, `zookeeper`, `pgadmin`
+
+### Frontend
+- Components/pages: PascalCase — `PlaceOrderPage`, `ToastContext`
+- API functions: camelCase — `placeOrder`, `getWallets`
+- Types: PascalCase interfaces — `OrderResponse`, `WalletResponse`
+
+## Architecture Decisions
+
+### Request flow
+1. Browser → nginx (port 3000) → nginx proxies `/api/*` → gateway (port 8080)
+2. Gateway validates JWT → injects `X-User-Id` header → forwards to service
+3. Services read user from `X-User-Id` header, never re-parse JWT themselves
+
+### Security
+- JWT: HMAC-SHA, access token 15 min, refresh token 7 days
+- `JWT_SECRET_KEY` must match in: gateway, auth, order-matching, wallet
+- Refresh tokens stored in Redis, revoked on logout
+- Frontend: access token in JS memory only; refresh token in localStorage
+
+### Order lifecycle
+```
+POST /api/v1/orders
+  → persist Order (PENDING)
+  → publish OrderPlacedEvent → Kafka order-events
+  → matchOrder() synchronously
+  → publish OrderMatchedEvent (if matched)
+```
+
+### Wallet saga (Kafka-driven)
+- `ORDER_PLACED` → lock funds
+- `ORDER_MATCHED` → settle (debitLocked payer, deposit receiver)
+- `ORDER_CANCELLED` → unlock funds
+- All events checked against ProcessedEvent table for idempotency
+
+### Market data
+- Updated on every ORDER_MATCHED event
+- Redis cache with 10-minute TTL, evicted on trade
+- 24h stats reset daily at midnight UTC
+
+## Code Standards
+
+### Java
+- Lombok: `@Data @Builder @RequiredArgsConstructor @Slf4j`
+- `@Transactional` on all service write methods
+- Never expose JPA entities from controllers — always map to DTOs
+- Tests: Mockito mocks only (no embedded DB). Set `eventType` in all Kafka test fixtures.
+
+### Frontend
+- API errors: read `err.userMessage` (set by Axios interceptor)
+- Mutations: always invalidate affected React Query cache keys on success
+- No hardcoded API base URLs — use `VITE_API_BASE_URL` env var
+
+## Build
+```bash
+mvn -B clean verify          # build + test all modules
+mvn -B test -pl wallet       # single module
+docker compose up --build    # full stack
+```
+
+## Never Break
+- JWT_SECRET_KEY identical in 4 services
+- Kafka events always have `eventType` field
+- Wallet consumer always checks ProcessedEvent before acting
+- Lombok before MapStruct in annotationProcessorPaths

@@ -16,12 +16,15 @@ public class OrderMatchedEvent {
     private String symbol;
     private BigDecimal price;
     private BigDecimal quantity;
+    private BigDecimal buyerLimitPrice;
+    private BigDecimal sellerLimitPrice;
     private UUID buyerUserId;
     private UUID sellerUserId;
     private LocalDateTime timestamp;
 
     public OrderMatchedEvent(UUID tradeId, UUID buyOrderId, UUID sellOrderId, String symbol,
                              BigDecimal price, BigDecimal quantity,
+                             BigDecimal buyerLimitPrice, BigDecimal sellerLimitPrice,
                              UUID buyerUserId, UUID sellerUserId, LocalDateTime timestamp) {
         this.tradeId = tradeId;
         this.buyOrderId = buyOrderId;
@@ -29,6 +32,8 @@ public class OrderMatchedEvent {
         this.symbol = symbol;
         this.price = price;
         this.quantity = quantity;
+        this.buyerLimitPrice = buyerLimitPrice;
+        this.sellerLimitPrice = sellerLimitPrice;
         this.buyerUserId = buyerUserId;
         this.sellerUserId = sellerUserId;
         this.timestamp = timestamp;

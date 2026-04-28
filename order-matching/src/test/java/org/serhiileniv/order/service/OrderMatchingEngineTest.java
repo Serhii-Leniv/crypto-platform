@@ -11,6 +11,7 @@ import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.repository.OrderRepository;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -28,7 +29,7 @@ class OrderMatchingEngineTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private OrderEventProducer eventProducer;
+    private ApplicationEventPublisher applicationEventPublisher;
 
     @InjectMocks
     private OrderMatchingEngine matchingEngine;
@@ -56,7 +57,7 @@ class OrderMatchingEngineTest {
 
         verify(orderRepository, atLeastOnce()).save(newBuyOrder);
         verify(orderRepository, atLeastOnce()).save(sellOrder);
-        verify(eventProducer).sendOrderMatchedEvent(any());
+        verify(applicationEventPublisher).publishEvent(any(Object.class));
     }
 
     @Test

@@ -8,6 +8,7 @@ import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.repository.OrderRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -21,7 +22,7 @@ import java.util.UUID;
 @Slf4j
 public class OrderMatchingEngine {
     private final OrderRepository orderRepository;
-    private final OrderEventProducer eventProducer;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
     public List<OrderMatchedEvent> matchOrder(Order newOrder) {
@@ -43,7 +44,7 @@ public class OrderMatchingEngine {
             matchedEvents.add(matchEvent);
             orderRepository.save(counterpartyOrder);
             orderRepository.save(newOrder);
-            eventProducer.sendOrderMatchedEvent(matchEvent);
+            applicationEventPublisher.publishEvent(matchEvent);
             log.info("Matched {} units at price {} for trade {}",
                     matchEvent.getQuantity(), matchEvent.getPrice(), matchEvent.getTradeId());
         }
@@ -86,11 +87,15 @@ public class OrderMatchingEngine {
             event.setSellOrderId(counterpartyOrder.getId());
             event.setBuyerUserId(newOrder.getUserId());
             event.setSellerUserId(counterpartyOrder.getUserId());
+            event.setBuyerLimitPrice(newOrder.getPrice());
+            event.setSellerLimitPrice(counterpartyOrder.getPrice());
         } else {
             event.setBuyOrderId(counterpartyOrder.getId());
             event.setSellOrderId(newOrder.getId());
             event.setBuyerUserId(counterpartyOrder.getUserId());
             event.setSellerUserId(newOrder.getUserId());
+            event.setBuyerLimitPrice(counterpartyOrder.getPrice());
+            event.setSellerLimitPrice(newOrder.getPrice());
         }
         event.setSymbol(newOrder.getSymbol());
         event.setPrice(matchPrice);
