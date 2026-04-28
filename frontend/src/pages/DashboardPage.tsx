@@ -1,7 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-import { getAllMarketData } from '../api/market';
 import Spinner from '../components/Spinner';
 import type { MarketDataResponse } from '../types';
+import { useMarketDataStream } from '../hooks/useMarketDataStream';
 
 function PriceChange({ value }: { value: string }) {
   const num = parseFloat(value);
@@ -20,23 +19,20 @@ function fmt(value: string, decimals = 2) {
 }
 
 export default function DashboardPage() {
-  const { data, isLoading, error } = useQuery<MarketDataResponse[]>({
-    queryKey: ['market-data'],
-    queryFn: getAllMarketData,
-    refetchInterval: 5000,
-  });
+  const { data, connected } = useMarketDataStream();
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-100">Market Overview</h2>
-        <span className="text-xs text-gray-500">Auto-refreshes every 5s</span>
+        <span className="text-xs" style={{ color: connected ? '#0ecb81' : '#9ca3af' }}>
+          {connected ? '● Live' : '○ Connecting...'}
+        </span>
       </div>
 
-      {isLoading && <Spinner />}
-      {error && <p className="text-red-400">Failed to load market data.</p>}
+      {!connected && data.length === 0 && <Spinner />}
 
-      {data && (
+      {data.length > 0 && (
         <div
           className="rounded-xl overflow-hidden"
           style={{ border: '1px solid #3c4049' }}
@@ -59,9 +55,9 @@ export default function DashboardPage() {
                   </td>
                 </tr>
               )}
-              {data.map((row) => (
+              {data.map((row: MarketDataResponse) => (
                 <tr
-                  key={row.id}
+                  key={row.symbol}
                   style={{ borderBottom: '1px solid #3c4049' }}
                   className="hover:bg-gray-800 transition-colors"
                 >
@@ -79,6 +75,10 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {connected && data.length === 0 && (
+        <p className="text-gray-500 text-sm mt-4">No market data yet. Place some orders to generate activity.</p>
       )}
     </div>
   );

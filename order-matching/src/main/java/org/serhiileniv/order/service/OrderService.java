@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.serhiileniv.order.dto.OrderRequest;
 import org.serhiileniv.order.dto.OrderResponse;
 import org.serhiileniv.order.exception.OrderNotFoundException;
+import org.serhiileniv.order.grpc.OrderBookStreamRegistry;
+import org.serhiileniv.order.grpc.OrderBookStreamServiceImpl;
 import org.serhiileniv.order.kafka.OrderEventProducer;
 import org.serhiileniv.order.kafka.event.OrderCancelledEvent;
 import org.serhiileniv.order.kafka.event.OrderPlacedEvent;
@@ -25,6 +27,7 @@ public class OrderService {
         private final OrderRepository orderRepository;
         private final OrderMatchingEngine matchingEngine;
         private final OrderEventProducer eventProducer;
+        private final OrderBookStreamRegistry orderBookStreamRegistry;
 
         @Transactional
         public OrderResponse placeOrder(OrderRequest request, UUID userId) {
@@ -54,6 +57,7 @@ public class OrderService {
                 order = orderRepository.findById(savedOrderId)
                                 .orElseThrow(() -> new OrderNotFoundException(savedOrderId));
                 log.info("Order placed successfully: {} with status: {}", order.getId(), order.getStatus());
+                broadcastOrderBook(order.getSymbol());
                 return OrderResponse.fromEntity(order);
         }
 
@@ -80,6 +84,7 @@ public class OrderService {
                                 LocalDateTime.now());
                 eventProducer.sendOrderCancelledEvent(cancelledEvent);
                 log.info("Order cancelled: {}", orderId);
+                broadcastOrderBook(order.getSymbol());
         }
 
         @Transactional
@@ -100,6 +105,15 @@ public class OrderService {
         @Transactional
         public OrderMatchingEngine.OrderBook getOrderBook(String symbol) {
                 return matchingEngine.getOrderBook(symbol);
+        }
+
+        private void broadcastOrderBook(String symbol) {
+                try {
+                        OrderMatchingEngine.OrderBook book = matchingEngine.getOrderBook(symbol);
+                        orderBookStreamRegistry.broadcast(symbol, OrderBookStreamServiceImpl.buildSnapshot(symbol, book));
+                } catch (Exception e) {
+                        log.warn("Failed to broadcast order book update for symbol={}: {}", symbol, e.getMessage());
+                }
         }
 
         @Transactional(readOnly = true)
@@ -132,5 +146,6 @@ public class OrderService {
                                 LocalDateTime.now());
                 eventProducer.sendOrderCancelledEvent(cancelledEvent);
                 log.info("Admin cancelled order: {}", orderId);
+                broadcastOrderBook(order.getSymbol());
         }
 }

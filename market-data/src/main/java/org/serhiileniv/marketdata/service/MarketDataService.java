@@ -38,7 +38,7 @@ public class MarketDataService {
             @CacheEvict(value = "marketData", key = "#symbol"),
             @CacheEvict(value = "allMarketData", allEntries = true)
     })
-    public void updateMarketData(String symbol, BigDecimal price, BigDecimal quantity) {
+    public MarketData updateMarketData(String symbol, BigDecimal price, BigDecimal quantity) {
         log.info("Updating market data for {}: price={}, quantity={}", symbol, price, quantity);
         MarketData marketData = marketDataRepository.findBySymbolWithLock(symbol)
                 .orElseGet(() -> {
@@ -58,8 +58,9 @@ public class MarketDataService {
                     return saved;
                 });
         marketData.updateFromTrade(price, quantity);
-        marketDataRepository.save(marketData);
-        log.info("Market data updated for {}: {}", symbol, marketData.getLastPrice());
+        MarketData saved = marketDataRepository.save(marketData);
+        log.info("Market data updated for {}: {}", symbol, saved.getLastPrice());
+        return saved;
     }
 
     @Scheduled(cron = "0 0 0 * * *")

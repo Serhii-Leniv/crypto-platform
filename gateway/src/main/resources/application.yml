@@ -91,6 +91,15 @@ spring:
 server:
   port: 8080
 
+grpc:
+  client:
+    market-data-service:
+      address: 'static://${MARKET_SERVICE_HOST:localhost}:9084'
+      negotiation-type: plaintext
+    order-matching-service:
+      address: 'static://${ORDER_SERVICE_HOST:localhost}:9082'
+      negotiation-type: plaintext
+
 # JWT Configuration
 application:
   security:

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option java_package = "org.serhiileniv.marketdata.grpc";
+option java_outer_classname = "MarketDataProto";
+option java_multiple_files = true;
+
+service MarketDataStreamService {
+  rpc StreamAllMarketData(SubscribeRequest) returns (stream MarketDataUpdate);
+}
+
+message SubscribeRequest {}
+
+message MarketDataUpdate {
+  string symbol              = 1;
+  string last_price          = 2;
+  string volume24h           = 3;
+  string high24h             = 4;
+  string low24h              = 5;
+  string price_change24h     = 6;
+  string price_change_pct24h = 7;
+  int64  trade_count24h      = 8;
+  string updated_at          = 9;
+}

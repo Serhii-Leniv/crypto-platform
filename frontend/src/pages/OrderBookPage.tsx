@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getOrderBook } from '../api/orders';
 import Spinner from '../components/Spinner';
 import type { OrderResponse } from '../types';
+import { useOrderBookStream } from '../hooks/useOrderBookStream';
 
 interface AggLevel { price: number; quantity: number; count: number; }
 
@@ -109,8 +108,8 @@ function DepthTable({ orders, side, aggregated }: { orders: OrderResponse[]; sid
               </td>
             </tr>
           )}
-          {sorted.map((o) => (
-            <tr key={o.id} style={{ borderBottom: '1px solid #2a2d35' }} className="hover:bg-gray-800">
+          {sorted.map((o, idx) => (
+            <tr key={`${o.price}-${idx}`} style={{ borderBottom: '1px solid #2a2d35' }} className="hover:bg-gray-800">
               <td className="px-4 py-2 font-mono" style={{ color }}>{parseFloat(o.price ?? '0').toFixed(2)}</td>
               <td className="px-4 py-2 text-right text-gray-300 font-mono">{parseFloat(o.quantity).toFixed(6)}</td>
               <td className="px-4 py-2 text-right text-gray-500 font-mono">{parseFloat(o.filledQuantity).toFixed(6)}</td>
@@ -127,26 +126,21 @@ export default function OrderBookPage() {
   const [inputVal, setInputVal] = useState('BTC-USDT');
   const [aggregated, setAggregated] = useState(true);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['order-book', symbol],
-    queryFn: () => getOrderBook(symbol),
-    refetchInterval: 5000,
-    enabled: !!symbol,
-  });
+  const { buyOrders, sellOrders, connected } = useOrderBookStream(symbol);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     setSymbol(inputVal.toUpperCase().trim());
   }
 
-  const bestBid = data?.buyOrders.reduce((best, o) => {
+  const bestBid = buyOrders.reduce((best, o) => {
     const p = parseFloat(o.price ?? '0');
     return p > best ? p : best;
-  }, 0) ?? 0;
-  const bestAsk = data?.sellOrders.reduce((best, o) => {
+  }, 0);
+  const bestAsk = sellOrders.reduce((best, o) => {
     const p = parseFloat(o.price ?? 'Infinity');
     return p < best ? p : best;
-  }, Infinity) ?? Infinity;
+  }, Infinity);
   const spread = bestAsk !== Infinity && bestBid > 0 ? bestAsk - bestBid : null;
 
   return (
@@ -189,18 +183,17 @@ export default function OrderBookPage() {
           </span>
         )}
 
-        <span className="text-xs text-gray-500 ml-auto">Auto-refreshes every 5s</span>
+        <span className="text-xs ml-auto" style={{ color: connected ? '#0ecb81' : '#9ca3af' }}>
+          {connected ? '● Live' : '○ Connecting...'}
+        </span>
       </div>
 
-      {isLoading && <Spinner />}
-      {error && <p className="text-red-400">Failed to load order book.</p>}
+      {!connected && buyOrders.length === 0 && sellOrders.length === 0 && <Spinner />}
 
-      {data && (
-        <div className="flex gap-4">
-          <DepthTable orders={data.buyOrders} side="BUY" aggregated={aggregated} />
-          <DepthTable orders={data.sellOrders} side="SELL" aggregated={aggregated} />
-        </div>
-      )}
+      <div className="flex gap-4">
+        <DepthTable orders={buyOrders} side="BUY" aggregated={aggregated} />
+        <DepthTable orders={sellOrders} side="SELL" aggregated={aggregated} />
+      </div>
     </div>
   );
 }

@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+option java_package = "org.serhiileniv.order.grpc";
+option java_outer_classname = "OrderBookProto";
+option java_multiple_files = true;
+
+service OrderBookStreamService {
+  rpc StreamOrderBook(OrderBookRequest) returns (stream OrderBookSnapshot);
+}
+
+message OrderBookRequest {
+  string symbol = 1;
+}
+
+message OrderEntry {
+  string price           = 1;
+  string quantity        = 2;
+  string filled_quantity = 3;
+}
+
+message OrderBookSnapshot {
+  string            symbol     = 1;
+  repeated OrderEntry buy_orders  = 2;
+  repeated OrderEntry sell_orders = 3;
+}
