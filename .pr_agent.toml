@@ -6,6 +6,7 @@ fallback_models = ["gemini/gemini-2.0-flash-lite", "gemini/gemini-1.5-flash"]
 auto_review   = true
 auto_describe = true
 auto_improve  = true
+pr_actions = ["opened", "reopened", "ready_for_review", "synchronize"]
 
 [pr_reviewer]
 require_score_label = false
