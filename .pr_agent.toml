@@ -9,4 +9,7 @@ auto_improve  = true
 
 [pr_reviewer]
 require_score_label = false
+inline_code_comments = true
+
+[pr_code_suggestions]
 num_code_suggestions = 4
