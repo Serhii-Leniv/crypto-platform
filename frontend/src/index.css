@@ -1,15 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
 @import "tailwindcss";
 
 @theme {
-  --color-brand: #f0b90b;
+  --color-brand:      #f0b90b;
   --color-brand-dark: #d4a309;
-  --color-surface: #1e2026;
-  --color-card: #252930;
-  --color-border: #3c4049;
+  --color-surface:    #1e2026;
+  --color-card:       #252930;
+  --color-border:     #3c4049;
+  --color-buy:        #0ecb81;
+  --color-sell:       #f6465d;
+  --color-muted:      #9ca3af;
+  --color-subtle:     #6b7280;
 }
 
 *, *::before, *::after {
   box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(240, 185, 11, 0.25);
+  color: #fff;
 }
 
 body {
@@ -18,10 +29,59 @@ body {
   color: #e2e8f0;
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1e2026;
+}
+::-webkit-scrollbar-thumb {
+  background: #3c4049;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555b69;
+}
+
+/* Input focus glow */
+.input-field {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input-field:focus {
+  outline: none;
+  border-color: #f0b90b !important;
+  box-shadow: 0 0 0 2px rgba(240, 185, 11, 0.15);
+}
+
+/* Remove number input arrows */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* Toast animation */
+@keyframes toast-slide-in {
+  from {
+    transform: translateX(110%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
