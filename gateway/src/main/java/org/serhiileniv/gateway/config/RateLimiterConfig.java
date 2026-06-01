@@ -10,6 +10,7 @@ import java.util.Objects;
 @Configuration
 public class RateLimiterConfig {
 
+    /** IP-based key — used for public endpoints (auth, market-data). */
     @Bean
     public KeyResolver ipKeyResolver() {
         return exchange -> Mono.just(
@@ -17,5 +18,22 @@ public class RateLimiterConfig {
                         .getAddress()
                         .getHostAddress()
         );
+    }
+
+    /**
+     * User-based key for authenticated endpoints (orders, wallet).
+     * Falls back to IP when X-User-Id is absent so unauthenticated probes are still limited.
+     */
+    @Bean
+    public KeyResolver userKeyResolver() {
+        return exchange -> {
+            String userId = exchange.getRequest().getHeaders().getFirst("X-User-Id");
+            if (userId != null && !userId.isBlank()) {
+                return Mono.just("user:" + userId);
+            }
+            String ip = Objects.requireNonNull(exchange.getRequest().getRemoteAddress())
+                    .getAddress().getHostAddress();
+            return Mono.just("ip:" + ip);
+        };
     }
 }

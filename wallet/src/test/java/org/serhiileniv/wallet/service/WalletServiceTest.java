@@ -118,7 +118,49 @@ class WalletServiceTest {
         walletService.processTrade(userId, currency, new BigDecimal("100"), UUID.randomUUID(), false);
 
         assertEquals(0, BigDecimal.ZERO.compareTo(wallet.getLockedBalance()));
-        assertEquals(0, new BigDecimal("900").compareTo(wallet.getBalance())); // Total balance decreases on sell
+        assertEquals(0, new BigDecimal("900").compareTo(wallet.getBalance()));
         verify(transactionRepository).save(any());
+    }
+
+    @Test
+    void lockFunds_InsufficientAvailableBalance_ThrowsException() {
+        wallet.setLockedBalance(new BigDecimal("900")); // only 100 available out of 1000
+        when(walletRepository.findByUserIdAndCurrencyWithLock(userId, currency)).thenReturn(Optional.of(wallet));
+
+        assertThrows(InsufficientFundsException.class,
+                () -> walletService.lockFunds(userId, currency, new BigDecimal("500"), UUID.randomUUID()));
+    }
+
+    @Test
+    void deposit_WalletNotFound_CreatesNewWallet() {
+        Wallet newWallet = Wallet.builder()
+                .userId(userId).currency(currency)
+                .balance(BigDecimal.ZERO).lockedBalance(BigDecimal.ZERO).build();
+        when(walletRepository.findByUserIdAndCurrencyWithLock(userId, currency)).thenReturn(Optional.empty());
+        when(walletRepository.saveAndFlush(any())).thenReturn(newWallet);
+
+        walletService.deposit(userId, currency, new BigDecimal("200"));
+
+        verify(walletRepository).saveAndFlush(any());
+    }
+
+    @Test
+    void withdraw_ExactAvailableBalance_Succeeds() {
+        when(walletRepository.findByUserIdAndCurrencyWithLock(userId, currency)).thenReturn(Optional.of(wallet));
+
+        walletService.withdraw(userId, currency, new BigDecimal("1000"));
+
+        assertEquals(0, BigDecimal.ZERO.compareTo(wallet.getBalance()));
+    }
+
+    @Test
+    void unlockFunds_MoreThanLocked_ClampsToZero() {
+        wallet.setLockedBalance(new BigDecimal("50"));
+        when(walletRepository.findByUserIdAndCurrencyWithLock(userId, currency)).thenReturn(Optional.of(wallet));
+
+        walletService.unlockFunds(userId, currency, new BigDecimal("50"), UUID.randomUUID());
+
+        assertEquals(0, BigDecimal.ZERO.compareTo(wallet.getLockedBalance()));
+        verify(walletRepository).save(wallet);
     }
 }

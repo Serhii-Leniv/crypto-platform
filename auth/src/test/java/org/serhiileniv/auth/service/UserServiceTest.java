@@ -132,4 +132,47 @@ class UserServiceTest {
 
         assertThrows(TokenException.class, () -> userService.refreshToken(request));
     }
+
+    @Test
+    void refreshToken_TokenNotFoundInRedis_ThrowsTokenException() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn("Bearer someRefreshToken");
+        when(jwtService.extractUsername("someRefreshToken")).thenReturn("test@example.com");
+        when(refreshTokenRepository.findById("someRefreshToken")).thenReturn(Optional.empty());
+
+        assertThrows(TokenException.class, () -> userService.refreshToken(request));
+    }
+
+    @Test
+    void refreshToken_TokenInvalid_ThrowsTokenException() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn("Bearer badToken");
+        when(jwtService.extractUsername("badToken")).thenReturn("test@example.com");
+        when(refreshTokenRepository.findById("badToken")).thenReturn(Optional.of(new RefreshToken()));
+        when(userRepository.findUserByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(jwtService.isTokenValid("badToken", user)).thenReturn(false);
+
+        assertThrows(TokenException.class, () -> userService.refreshToken(request));
+    }
+
+    @Test
+    void logout_WithValidToken_DeletesRefreshToken() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn("Bearer myRefreshToken");
+        when(jwtService.extractUsername("myRefreshToken")).thenReturn("test@example.com");
+
+        userService.logout(request);
+
+        verify(refreshTokenRepository).deleteById("myRefreshToken");
+    }
+
+    @Test
+    void logout_WithNoToken_DoesNothing() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn(null);
+
+        userService.logout(request);
+
+        verify(refreshTokenRepository, never()).deleteById(any());
+    }
 }

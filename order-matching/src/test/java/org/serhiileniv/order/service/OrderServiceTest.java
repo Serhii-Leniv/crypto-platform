@@ -18,12 +18,14 @@ import org.serhiileniv.order.repository.OrderRepository;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(MockitoExtension.class)
 @SuppressWarnings("null")
@@ -117,5 +119,53 @@ class OrderServiceTest {
         when(orderRepository.findByIdAndUserId(orderId, userId)).thenReturn(Optional.empty());
 
         assertThrows(OrderNotFoundException.class, () -> orderService.getOrderById(orderId, userId));
+    }
+
+    @Test
+    void getUserOrders_ReturnsUserOrders() {
+        when(orderRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of(order));
+
+        var orders = orderService.getUserOrders(userId);
+
+        assertEquals(1, orders.size());
+        assertEquals(orderId, orders.get(0).id());
+    }
+
+    @Test
+    void getUserOrders_EmptyList() {
+        when(orderRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+
+        var orders = orderService.getUserOrders(userId);
+
+        assertTrue(orders.isEmpty());
+    }
+
+    @Test
+    void cancelOrder_PartiallyFilled_Success() {
+        order.setStatus(OrderStatus.PARTIALLY_FILLED);
+        when(orderRepository.findByIdAndUserId(orderId, userId)).thenReturn(Optional.of(order));
+
+        orderService.cancelOrder(orderId, userId);
+
+        assertEquals(OrderStatus.CANCELLED, order.getStatus());
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    void placeOrder_MarketOrder_SkipsPriceValidation() {
+        OrderRequest marketRequest = new OrderRequest(
+                "ETH-USDT", OrderType.MARKET, OrderSide.BUY, null, new BigDecimal("0.5"));
+        Order marketOrder = Order.builder()
+                .id(orderId).userId(userId).symbol("ETH-USDT")
+                .orderType(OrderType.MARKET).side(OrderSide.BUY)
+                .quantity(new BigDecimal("0.5")).filledQuantity(BigDecimal.ZERO)
+                .status(OrderStatus.PENDING).build();
+        when(orderRepository.save(any())).thenReturn(marketOrder);
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(marketOrder));
+
+        OrderResponse response = orderService.placeOrder(marketRequest, userId);
+
+        assertNotNull(response);
+        assertEquals("ETH-USDT", response.symbol());
     }
 }

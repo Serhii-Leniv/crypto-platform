@@ -116,6 +116,83 @@ class OrderMatchingEngineTest {
         assertEquals(OrderStatus.PENDING, newBuyOrder.getStatus());
     }
 
+    @Test
+    void matchOrder_MarketBuyOrder_MatchesAtCounterpartyPrice() {
+        Order sellOrder = createOrder(userId2, symbol, OrderSide.SELL, "48000", "1");
+        when(orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL))
+                .thenReturn(List.of(sellOrder));
+
+        Order marketBuy = Order.builder()
+                .id(UUID.randomUUID()).userId(userId1).symbol(symbol)
+                .side(OrderSide.BUY).price(null) // MARKET — no price limit
+                .quantity(new BigDecimal("1")).filledQuantity(BigDecimal.ZERO)
+                .status(OrderStatus.PENDING).build();
+
+        List<OrderMatchedEvent> events = matchingEngine.matchOrder(marketBuy);
+
+        assertEquals(1, events.size());
+        assertEquals(0, new BigDecimal("48000").compareTo(events.get(0).getPrice()));
+        assertEquals(OrderStatus.FILLED, marketBuy.getStatus());
+    }
+
+    @Test
+    void matchOrder_SellOrder_MatchesAgainstBuyOrders() {
+        Order buyOrder = createOrder(userId2, symbol, OrderSide.BUY, "50000", "2");
+        when(orderRepository.findBuyOrdersForMatching(symbol, OrderSide.BUY))
+                .thenReturn(List.of(buyOrder));
+
+        Order newSellOrder = createOrder(userId1, symbol, OrderSide.SELL, "50000", "2");
+        List<OrderMatchedEvent> events = matchingEngine.matchOrder(newSellOrder);
+
+        assertEquals(1, events.size());
+        assertEquals(OrderStatus.FILLED, newSellOrder.getStatus());
+        assertEquals(OrderStatus.FILLED, buyOrder.getStatus());
+        assertEquals(userId1, events.get(0).getSellerUserId());
+        assertEquals(userId2, events.get(0).getBuyerUserId());
+    }
+
+    @Test
+    void matchOrder_EmptyOrderBook_NoEvents() {
+        when(orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL))
+                .thenReturn(List.of());
+
+        Order buyOrder = createOrder(userId1, symbol, OrderSide.BUY, "50000", "1");
+        List<OrderMatchedEvent> events = matchingEngine.matchOrder(buyOrder);
+
+        assertTrue(events.isEmpty());
+        assertEquals(OrderStatus.PENDING, buyOrder.getStatus());
+        verify(applicationEventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void matchOrder_SkipsCancelledCounterparty() {
+        Order cancelledSell = createOrder(userId2, symbol, OrderSide.SELL, "50000", "1");
+        cancelledSell.setStatus(OrderStatus.CANCELLED);
+        Order validSell = createOrder(userId2, symbol, OrderSide.SELL, "50000", "1");
+        when(orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL))
+                .thenReturn(List.of(cancelledSell, validSell));
+
+        Order buyOrder = createOrder(userId1, symbol, OrderSide.BUY, "50000", "1");
+        List<OrderMatchedEvent> events = matchingEngine.matchOrder(buyOrder);
+
+        assertEquals(1, events.size());
+        assertEquals(OrderStatus.FILLED, buyOrder.getStatus());
+        assertEquals(OrderStatus.FILLED, validSell.getStatus());
+        assertEquals(OrderStatus.CANCELLED, cancelledSell.getStatus()); // unchanged
+    }
+
+    @Test
+    void matchOrder_SellBelowBuyPrice_NoMatch() {
+        Order buyOrder = createOrder(userId2, symbol, OrderSide.BUY, "45000", "1");
+        when(orderRepository.findBuyOrdersForMatching(symbol, OrderSide.BUY))
+                .thenReturn(List.of(buyOrder));
+
+        Order sellOrder = createOrder(userId1, symbol, OrderSide.SELL, "48000", "1");
+        List<OrderMatchedEvent> events = matchingEngine.matchOrder(sellOrder);
+
+        assertTrue(events.isEmpty());
+    }
+
     private Order createOrder(UUID userId, String symbol, OrderSide side, String price, String quantity) {
         return Order.builder()
                 .id(UUID.randomUUID())

@@ -1,0 +1,115 @@
+{
+  "title": "Crypto Exchange Platform",
+  "uid": "crypto-platform",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "tags": ["crypto", "microservices", "spring-boot"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(http_server_requests_seconds_count{job=~\".+\"}[1m])) by (application)",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "HTTP Error Rate (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])) by (application) / sum(rate(http_server_requests_seconds_count[1m])) by (application) * 100",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "HTTP P99 Latency (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket[1m])) by (le, application)) * 1000",
+          "legendFormat": "{{application}} p99"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "JVM Heap Used (MB)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "jvm_memory_used_bytes{area=\"heap\"} / 1024 / 1024",
+          "legendFormat": "{{application}} heap"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Circuit Breaker State",
+      "type": "table",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "resilience4j_circuitbreaker_state{application=\"api-gateway\"}",
+          "legendFormat": "{{name}} — {{state}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Kafka Consumer Lag",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "kafka_consumer_fetch_manager_records_lag{application=~\".+\"}",
+          "legendFormat": "{{application}} — {{topic}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "GC Pause Time (ms/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 22 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(jvm_gc_pause_seconds_sum[1m]) * 1000",
+          "legendFormat": "{{application}} — {{action}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Active HTTP Connections",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 22 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "tomcat_threads_busy_threads",
+          "legendFormat": "{{application}}"
+        }
+      ]
+    }
+  ]
+}

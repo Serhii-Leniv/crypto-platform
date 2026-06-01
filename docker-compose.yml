@@ -72,6 +72,15 @@ services:
       timeout: 10s
       retries: 5
 
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: zipkin
+    restart: unless-stopped
+    ports:
+      - "9411:9411"
+    networks:
+      - crypto-network
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
@@ -115,6 +124,7 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
     depends_on:
       - prometheus
     networks:
@@ -137,10 +147,13 @@ services:
       SPRING_DATA_REDIS_HOST: redis-cache
       SPRING_DATA_REDIS_PORT: 6379
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
       postgres:
         condition: service_healthy
       redis-cache:
+        condition: service_started
+      zipkin:
         condition: service_started
     networks:
       - crypto-network
@@ -161,11 +174,14 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      zipkin:
+        condition: service_started
     networks:
       - crypto-network
 
@@ -185,11 +201,14 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      zipkin:
+        condition: service_started
     networks:
       - crypto-network
 
@@ -210,12 +229,15 @@ services:
       SPRING_DATA_REDIS_HOST: redis-market
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
       redis-market:
+        condition: service_started
+      zipkin:
         condition: service_started
     networks:
       - crypto-network
@@ -240,12 +262,14 @@ services:
       SPRING_DATA_REDIS_HOST: redis-cache
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_CLOUD_COMPATIBILITY_VERIFIER_ENABLED: "false"
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
       - auth-service
       - order-service
       - wallet-service
       - market-service
       - redis-cache
+      - zipkin
     networks:
       - crypto-network
 

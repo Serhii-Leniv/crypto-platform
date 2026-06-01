@@ -23,6 +23,10 @@ spring:
                 redis-rate-limiter.replenishRate: 3
                 redis-rate-limiter.burstCapacity: 6
                 key-resolver: "#{@ipKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: auth-cb
+                fallbackUri: forward:/fallback/auth
 
         - id: auth-login
           uri: ${AUTH_SERVICE_URL:http://localhost:8081}
@@ -35,40 +39,126 @@ spring:
                 redis-rate-limiter.replenishRate: 5
                 redis-rate-limiter.burstCapacity: 10
                 key-resolver: "#{@ipKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: auth-cb
+                fallbackUri: forward:/fallback/auth
 
         - id: auth-refresh
           uri: ${AUTH_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/api/v1/auth/refresh
             - Method=POST
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@ipKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: auth-cb
+                fallbackUri: forward:/fallback/auth
 
         - id: auth-logout
           uri: ${AUTH_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/api/v1/auth/logout
             - Method=POST
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: "#{@ipKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: auth-cb
+                fallbackUri: forward:/fallback/auth
 
-        # Order Matching Service Routes (JWT required)
+        # Order Matching Service Routes (JWT required) — 10 req/s per authenticated user
         - id: orders-all
           uri: ${ORDER_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/api/v1/orders/**
           filters:
             - JwtAuthenticationFilter
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: order-cb
+                fallbackUri: forward:/fallback/orders
 
-        # Wallet Service Routes (JWT required)
+        # Wallet Service Routes (JWT required) — 5 req/s per authenticated user (financial ops)
         - id: wallet-all
           uri: ${WALLET_SERVICE_URL:http://localhost:8083}
           predicates:
             - Path=/api/v1/wallets/**
           filters:
             - JwtAuthenticationFilter
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: wallet-cb
+                fallbackUri: forward:/fallback/wallets
 
-        # Market Data Service Routes (Public access)
+        # Market Data Service Routes (Public) — 30 req/s per IP (read-heavy public endpoint)
         - id: market-data
           uri: ${MARKET_SERVICE_URL:http://localhost:8084}
           predicates:
             - Path=/api/v1/market-data/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                key-resolver: "#{@ipKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: market-cb
+                fallbackUri: forward:/fallback/market-data
+
+        # WebSocket — Market Data real-time feed (public)
+        - id: ws-market-data
+          uri: ${MARKET_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/ws/market-data/**
+          filters:
+            - RewritePath=/ws/market-data/(?<segment>.*), /ws/$\{segment}
+
+        # WebSocket — Order Book real-time feed (public)
+        - id: ws-orderbook
+          uri: ${ORDER_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/ws/orderbook/**
+          filters:
+            - RewritePath=/ws/orderbook/(?<segment>.*), /ws/$\{segment}
+
+        # Fallback routes
+        - id: fallback-auth
+          uri: no://op
+          predicates:
+            - Path=/fallback/auth
+        - id: fallback-orders
+          uri: no://op
+          predicates:
+            - Path=/fallback/orders
+        - id: fallback-wallets
+          uri: no://op
+          predicates:
+            - Path=/fallback/wallets
+        - id: fallback-market-data
+          uri: no://op
+          predicates:
+            - Path=/fallback/market-data
 
       globalcors:
         cors-configurations:
@@ -83,6 +173,39 @@ spring:
             allowedHeaders: "*"
             allowCredentials: false
 
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        registerHealthIndicator: true
+    instances:
+      auth-cb:
+        baseConfig: default
+      order-cb:
+        baseConfig: default
+      wallet-cb:
+        baseConfig: default
+      market-cb:
+        baseConfig: default
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 5s
+    instances:
+      auth-cb:
+        baseConfig: default
+      order-cb:
+        baseConfig: default
+      wallet-cb:
+        baseConfig: default
+      market-cb:
+        baseConfig: default
+
 server:
   port: 8080
   shutdown: graceful
@@ -96,10 +219,25 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info,metrics,prometheus,circuitbreakers
   endpoint:
     health:
       show-details: when-authorized
+  health:
+    circuitbreakers:
+      enabled: true
   metrics:
     tags:
       application: ${spring.application.name}
+
+  # Distributed Tracing
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"

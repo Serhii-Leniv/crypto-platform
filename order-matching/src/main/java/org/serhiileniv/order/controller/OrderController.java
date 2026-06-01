@@ -1,6 +1,11 @@
 package org.serhiileniv.order.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -11,6 +16,7 @@ import org.serhiileniv.order.dto.OrderResponse;
 import org.serhiileniv.order.service.OrderMatchingEngine;
 import org.serhiileniv.order.service.OrderService;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -23,12 +29,19 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 @Validated
-@Tag(name = "Orders", description = "Endpoints for managing trade orders")
+@Tag(name = "Orders", description = "Trade order management — place, query, cancel, and view the live order book")
+@SecurityRequirement(name = "bearerAuth")
 public class OrderController {
     private final OrderService orderService;
 
     @PostMapping
-    @Operation(summary = "Place order", description = "Creates a new BUY or SELL order")
+    @Operation(summary = "Place order", description = "Creates a new BUY or SELL LIMIT/MARKET order. Publishes OrderPlacedEvent to Kafka and runs the matching engine synchronously.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Order created", content = @Content(schema = @Schema(implementation = OrderResponse.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid request body", content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token", content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(responseCode = "422", description = "LIMIT order submitted without a price", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public ResponseEntity<OrderResponse> placeOrder(
             @Valid @RequestBody OrderRequest request,
             @RequestHeader("X-User-Id") String userId) {
@@ -40,7 +53,13 @@ public class OrderController {
     }
 
     @GetMapping("/{orderId}")
-    @Operation(summary = "Get order", description = "Retrieves an order by ID")
+    @Operation(summary = "Get order", description = "Retrieves a single order by ID. Only the owner can access their orders.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Order found", content = @Content(schema = @Schema(implementation = OrderResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token", content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(responseCode = "403", description = "Order belongs to a different user", content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(responseCode = "404", description = "Order not found", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public ResponseEntity<OrderResponse> getOrder(
             @PathVariable UUID orderId,
             @RequestHeader("X-User-Id") String userId) {
@@ -50,7 +69,11 @@ public class OrderController {
     }
 
     @GetMapping
-    @Operation(summary = "Get user orders", description = "Lists all orders for the authenticated user")
+    @Operation(summary = "List user orders", description = "Returns all orders placed by the authenticated user, newest first.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Orders list"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public ResponseEntity<List<OrderResponse>> getUserOrders(
             @RequestHeader("X-User-Id") String userId) {
         log.debug("Fetching all orders for user {}", userId);
@@ -60,7 +83,13 @@ public class OrderController {
     }
 
     @DeleteMapping("/{orderId}")
-    @Operation(summary = "Cancel order", description = "Cancels a pending order")
+    @Operation(summary = "Cancel order", description = "Cancels a PENDING or PARTIALLY_FILLED order. Publishes OrderCancelledEvent to unlock the reserved balance.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "204", description = "Order cancelled"),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token", content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(responseCode = "403", description = "Order belongs to a different user", content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(responseCode = "404", description = "Order not found", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public ResponseEntity<Void> cancelOrder(
             @PathVariable UUID orderId,
             @RequestHeader("X-User-Id") String userId) {
@@ -71,7 +100,12 @@ public class OrderController {
     }
 
     @GetMapping("/book/{symbol:.+}")
-    @Operation(summary = "Get order book", description = "Retrieves the current buy and sell orders for a symbol")
+    @Operation(summary = "Get order book", description = "Returns all open buy and sell orders for the given symbol, sorted by price-time priority.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Order book snapshot"),
+        @ApiResponse(responseCode = "400", description = "Invalid symbol format", content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
+        @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
     public ResponseEntity<OrderMatchingEngine.OrderBook> getOrderBook(
             @PathVariable
             @Pattern(regexp = "^[A-Z]{3,6}[/-][A-Z]{3,6}$", message = "Symbol must be in format XXX/XXX or XXX-XXX")

@@ -1,5 +1,6 @@
 package org.serhiileniv.wallet.kafka;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,19 +31,29 @@ public class OrderEventConsumer {
     @Transactional
     public void consumeOrderEvent(@Payload String message,
             @Header(KafkaHeaders.RECEIVED_KEY) String key) {
+        log.info("Received event with key: {}", key);
+        com.fasterxml.jackson.databind.JsonNode root;
         try {
-            log.info("Received event with key: {}", key);
-            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(message);
-            String eventType = root.path("eventType").asText("");
+            root = objectMapper.readTree(message);
+        } catch (JsonProcessingException e) {
+            // Malformed JSON — not retryable, log and discard
+            log.error("Unparseable event payload, discarding. key={} payload={}", key, message, e);
+            return;
+        }
+        // Business exceptions propagate to DefaultErrorHandler → exponential backoff → DLT
+        String eventType = root.path("eventType").asText("");
+        try {
             switch (eventType) {
                 case "ORDER_MATCHED"   -> handleOrderMatched(objectMapper.treeToValue(root, OrderMatchedEvent.class));
                 case "ORDER_PLACED"    -> handleOrderPlaced(objectMapper.treeToValue(root, OrderPlacedEvent.class));
                 case "ORDER_CANCELLED" -> handleOrderCancelled(objectMapper.treeToValue(root, OrderCancelledEvent.class));
                 default -> log.warn("Unknown or missing eventType '{}', key={}", eventType, key);
             }
-        } catch (Exception e) {
-            log.error("Error processing event key={}: {}", key, message, e);
+        } catch (JsonProcessingException e) {
+            log.error("Event type mapping failed, discarding. key={} eventType={}", key, eventType, e);
         }
+        // Runtime exceptions (InsufficientFunds, WalletNotFound, etc.) are not caught here —
+        // they bubble up to DefaultErrorHandler which retries with exponential backoff then routes to DLT
     }
 
     private void handleOrderPlaced(OrderPlacedEvent event) {

@@ -91,4 +91,67 @@ class OrderEventConsumerTest {
 
         verify(processedEventRepository).save(any());
     }
+
+    @Test
+    void consumeOrderEvent_OrderCancelled_BuyOrder_UnlocksFunds() throws Exception {
+        org.serhiileniv.wallet.kafka.event.OrderCancelledEvent event =
+                new org.serhiileniv.wallet.kafka.event.OrderCancelledEvent();
+        event.setEventType("ORDER_CANCELLED");
+        event.setOrderId(orderId);
+        event.setUserId(userId);
+        event.setSymbol(symbol);
+        event.setSide(OrderSide.BUY);
+        event.setPrice(new BigDecimal("50000"));
+        event.setRemainingQuantity(new BigDecimal("1"));
+
+        String message = objectMapper.writeValueAsString(event);
+        when(processedEventRepository.existsByEventId(orderId)).thenReturn(false);
+
+        orderEventConsumer.consumeOrderEvent(message, orderId.toString());
+
+        // BUY cancel: unlock quote currency (USDT) = price * remaining qty
+        verify(walletService).unlockFunds(eq(userId), eq("USDT"),
+                eq(new BigDecimal("50000")), eq(orderId));
+        verify(processedEventRepository).save(any());
+    }
+
+    @Test
+    void consumeOrderEvent_SellOrderPlaced_LocksBaseCurrency() throws Exception {
+        OrderPlacedEvent event = new OrderPlacedEvent();
+        event.setEventType("ORDER_PLACED");
+        event.setOrderId(orderId);
+        event.setUserId(userId);
+        event.setSymbol(symbol);
+        event.setSide(OrderSide.SELL);
+        event.setPrice(new BigDecimal("50000"));
+        event.setQuantity(new BigDecimal("0.5"));
+
+        String message = objectMapper.writeValueAsString(event);
+        when(processedEventRepository.existsByEventId(orderId)).thenReturn(false);
+
+        orderEventConsumer.consumeOrderEvent(message, orderId.toString());
+
+        // SELL: lock base currency (BTC) = quantity
+        verify(walletService).lockFunds(eq(userId), eq("BTC"),
+                eq(new BigDecimal("0.5")), eq(orderId));
+    }
+
+    @Test
+    void consumeOrderEvent_DuplicateEvent_IsSkipped() throws Exception {
+        OrderPlacedEvent event = new OrderPlacedEvent();
+        event.setEventType("ORDER_PLACED");
+        event.setOrderId(orderId);
+        event.setUserId(userId);
+        event.setSymbol(symbol);
+        event.setSide(OrderSide.BUY);
+        event.setPrice(new BigDecimal("50000"));
+        event.setQuantity(new BigDecimal("1"));
+
+        String message = objectMapper.writeValueAsString(event);
+        when(processedEventRepository.existsByEventId(orderId)).thenReturn(true);
+
+        orderEventConsumer.consumeOrderEvent(message, orderId.toString());
+
+        verify(walletService, never()).lockFunds(any(), any(), any(), any());
+    }
 }
