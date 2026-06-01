@@ -6,6 +6,8 @@ import org.serhiileniv.wallet.exception.WalletNotFoundException;
 import org.serhiileniv.wallet.model.*;
 import org.serhiileniv.wallet.repository.TransactionRepository;
 import org.serhiileniv.wallet.repository.WalletRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -124,8 +126,8 @@ public class WalletService {
         return walletRepository.findByUserId(userId);
     }
 
-    public List<Transaction> getUserTransactions(UUID userId) {
-        return transactionRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    public Page<Transaction> getUserTransactions(UUID userId, Pageable pageable) {
+        return transactionRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
     }
 
     private Wallet getOrCreateWalletLocked(UUID userId, String currency) {

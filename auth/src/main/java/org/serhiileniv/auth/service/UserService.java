@@ -1,6 +1,6 @@
 package org.serhiileniv.auth.service;
 
-import org.springframework.http.HttpHeaders;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,17 +17,22 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class UserService {
+
+    public record LoginResult(String accessToken, String refreshToken) {}
+
     private final UserRepository userRepository;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenRepository refreshTokenRepository;
 
     @Transactional
-    public AuthResponse register(UserDto userDto) {
+    public LoginResult register(UserDto userDto) {
         if (userDto == null) {
             throw new IllegalArgumentException("User data must not be null");
         }
@@ -46,11 +51,11 @@ public class UserService {
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
         refreshTokenRepository.save(new RefreshToken(refreshToken, user.getEmail()));
-        return new AuthResponse(accessToken, refreshToken);
+        return new LoginResult(accessToken, refreshToken);
     }
 
     @Transactional
-    public AuthResponse login(UserDto userDto) {
+    public LoginResult login(UserDto userDto) {
         log.info("Login attempt for email: {}", userDto.email());
         User user = userRepository.findUserByEmail(userDto.email())
                 .orElseThrow(() -> {
@@ -65,16 +70,15 @@ public class UserService {
         String refreshToken = jwtService.generateRefreshToken(user);
         refreshTokenRepository.save(new RefreshToken(refreshToken, user.getEmail()));
         log.info("Login successful: id={}, email={}", user.getId(), user.getEmail());
-        return new AuthResponse(accessToken, refreshToken);
+        return new LoginResult(accessToken, refreshToken);
     }
 
-    public AuthResponse refreshToken(HttpServletRequest request) {
-        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.warn("Token refresh failed — missing or malformed Authorization header");
+    public LoginResult refreshToken(HttpServletRequest request) {
+        String refreshToken = extractRefreshTokenFromCookie(request);
+        if (refreshToken == null) {
+            log.warn("Token refresh failed — refresh_token cookie missing");
             throw new TokenException("Refresh token is missing");
         }
-        String refreshToken = authHeader.substring(7);
         String userEmail = jwtService.extractUsername(refreshToken);
         log.debug("Token refresh requested for email: {}", userEmail);
         if (userEmail != null) {
@@ -84,11 +88,11 @@ public class UserService {
                         return new TokenException("Refresh token not found or revoked");
                     });
             User user = userRepository.findUserByEmail(userEmail)
-                    .orElseThrow(() -> new InvalidCredentialsException());
+                    .orElseThrow(InvalidCredentialsException::new);
             if (jwtService.isTokenValid(refreshToken, user)) {
-                String accessToken = jwtService.generateAccessToken(user);
+                String newAccess = jwtService.generateAccessToken(user);
                 log.info("Access token refreshed for email: {}", userEmail);
-                return new AuthResponse(accessToken, refreshToken);
+                return new LoginResult(newAccess, refreshToken);
             }
         }
         log.warn("Token refresh failed — invalid token for email: {}", userEmail);
@@ -96,14 +100,22 @@ public class UserService {
     }
 
     public void logout(HttpServletRequest request) {
-        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String refreshToken = authHeader.substring(7);
+        String refreshToken = extractRefreshTokenFromCookie(request);
+        if (refreshToken != null) {
             String userEmail = jwtService.extractUsername(refreshToken);
             refreshTokenRepository.deleteById(refreshToken);
             log.info("User logged out, refresh token revoked for email: {}", userEmail);
         } else {
-            log.debug("Logout called with no refresh token in Authorization header");
+            log.debug("Logout called with no refresh_token cookie");
         }
+    }
+
+    private String extractRefreshTokenFromCookie(HttpServletRequest request) {
+        if (request.getCookies() == null) return null;
+        return Arrays.stream(request.getCookies())
+                .filter(c -> "refresh_token".equals(c.getName()))
+                .map(Cookie::getValue)
+                .findFirst()
+                .orElse(null);
     }
 }

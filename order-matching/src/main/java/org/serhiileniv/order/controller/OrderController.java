@@ -15,6 +15,9 @@ import org.serhiileniv.order.dto.OrderRequest;
 import org.serhiileniv.order.dto.OrderResponse;
 import org.serhiileniv.order.service.OrderMatchingEngine;
 import org.serhiileniv.order.service.OrderService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -74,12 +77,12 @@ public class OrderController {
         @ApiResponse(responseCode = "200", description = "Orders list"),
         @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     })
-    public ResponseEntity<List<OrderResponse>> getUserOrders(
-            @RequestHeader("X-User-Id") String userId) {
-        log.debug("Fetching all orders for user {}", userId);
-        List<OrderResponse> orders = orderService.getUserOrders(UUID.fromString(userId));
-        log.debug("Returning {} orders for user {}", orders.size(), userId);
-        return ResponseEntity.ok(orders);
+    public ResponseEntity<Page<OrderResponse>> getUserOrders(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, Math.min(size, 100));
+        return ResponseEntity.ok(orderService.getUserOrders(UUID.fromString(userId), pageable));
     }
 
     @DeleteMapping("/{orderId}")

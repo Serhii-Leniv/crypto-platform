@@ -11,9 +11,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.serhiileniv.wallet.dto.*;
-import org.serhiileniv.wallet.model.Transaction;
 import org.serhiileniv.wallet.model.Wallet;
 import org.serhiileniv.wallet.service.WalletService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -87,13 +89,13 @@ public class WalletController {
         @ApiResponse(responseCode = "200", description = "Transaction list"),
         @ApiResponse(responseCode = "401", description = "Missing or invalid JWT token", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     })
-    public ResponseEntity<List<TransactionResponse>> getTransactions(@RequestHeader("X-User-Id") String userId) {
-        log.debug("Fetching transactions for user {}", userId);
-        List<Transaction> transactions = walletService.getUserTransactions(UUID.fromString(userId));
-        List<TransactionResponse> response = transactions.stream()
-                .map(TransactionResponse::from)
-                .toList();
-        log.debug("Returning {} transactions for user {}", response.size(), userId);
+    public ResponseEntity<Page<TransactionResponse>> getTransactions(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, Math.min(size, 100));
+        Page<TransactionResponse> response = walletService.getUserTransactions(UUID.fromString(userId), pageable)
+                .map(TransactionResponse::from);
         return ResponseEntity.ok(response);
     }
 }

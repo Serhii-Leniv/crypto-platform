@@ -1,9 +1,7 @@
 services:
-  postgres:
-    build:
-      context: ./docker/postgres
-      dockerfile: Dockerfile
-    container_name: postgres
+  postgres-auth:
+    image: postgres:15-alpine
+    container_name: postgres-auth
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-crypto_user}
@@ -12,9 +10,69 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_auth_data:/var/lib/postgresql/data
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crypto_user} -d auth_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crypto-network
+
+  postgres-order:
+    image: postgres:15-alpine
+    container_name: postgres-order
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crypto_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: order_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_order_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crypto_user} -d order_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crypto-network
+
+  postgres-wallet:
+    image: postgres:15-alpine
+    container_name: postgres-wallet
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crypto_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: wallet_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_wallet_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crypto_user} -d wallet_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crypto-network
+
+  postgres-market:
+    image: postgres:15-alpine
+    container_name: postgres-market
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crypto_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: market_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_market_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crypto_user} -d market_db" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -91,7 +149,10 @@ services:
     ports:
       - "5050:80"
     depends_on:
-      - postgres
+      - postgres-auth
+      - postgres-order
+      - postgres-wallet
+      - postgres-market
     networks:
       - crypto-network
 
@@ -141,7 +202,7 @@ services:
       - "8081:8081"
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-auth:5432/auth_db
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crypto_user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis-cache
@@ -149,7 +210,7 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
-      postgres:
+      postgres-auth:
         condition: service_healthy
       redis-cache:
         condition: service_started
@@ -169,14 +230,14 @@ services:
       - "8082:8082"
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/order_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-order:5432/order_db
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crypto_user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
-      postgres:
+      postgres-order:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -196,14 +257,14 @@ services:
       - "8083:8083"
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/wallet_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-wallet:5432/wallet_db
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crypto_user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
-      postgres:
+      postgres-wallet:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -223,7 +284,7 @@ services:
       - "8084:8084"
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/market_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-market:5432/market_db
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crypto_user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis-market
@@ -231,7 +292,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
-      postgres:
+      postgres-market:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -287,7 +348,10 @@ services:
       - crypto-network
 
 volumes:
-  postgres_data:
+  postgres_auth_data:
+  postgres_order_data:
+  postgres_wallet_data:
+  postgres_market_data:
   redis_auth_data:
   redis_market_data:
   prometheus_data:

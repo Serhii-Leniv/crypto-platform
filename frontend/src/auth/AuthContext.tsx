@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { login as apiLogin, register as apiRegister, logout as apiLogout } from '../api/auth';
+import { login as apiLogin, register as apiRegister, logout as apiLogout, refreshAccessToken } from '../api/auth';
 import { tokenStore } from '../api/tokenStore';
 
 interface AuthContextValue {
@@ -12,41 +12,42 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return !!localStorage.getItem('refreshToken');
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    // On mount, if we have a refresh token but no access token, the interceptor
-    // will handle the first 401 automatically. We just track auth state here.
-    const rt = localStorage.getItem('refreshToken');
-    if (!rt) {
-      tokenStore.clear();
-      setIsAuthenticated(false);
-    }
+    // Try to restore session via httpOnly cookie on mount
+    refreshAccessToken()
+      .then(({ accessToken }) => {
+        tokenStore.set(accessToken);
+        setIsAuthenticated(true);
+      })
+      .catch(() => {
+        tokenStore.clear();
+        setIsAuthenticated(false);
+      })
+      .finally(() => setInitialized(true));
   }, []);
 
   async function login(email: string, password: string) {
-    const { accessToken, refreshToken } = await apiLogin(email, password);
+    const { accessToken } = await apiLogin(email, password);
     tokenStore.set(accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
     setIsAuthenticated(true);
   }
 
   async function register(email: string, password: string) {
-    const { accessToken, refreshToken } = await apiRegister(email, password);
+    const { accessToken } = await apiRegister(email, password);
     tokenStore.set(accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
     setIsAuthenticated(true);
   }
 
   function logout() {
-    const rt = localStorage.getItem('refreshToken') ?? '';
-    apiLogout(rt);
+    apiLogout();
     tokenStore.clear();
-    localStorage.removeItem('refreshToken');
     setIsAuthenticated(false);
   }
+
+  if (!initialized) return null;
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, login, register, logout }}>

@@ -1,5 +1,6 @@
 package org.serhiileniv.auth.service;
 
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -7,7 +8,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.serhiileniv.auth.dto.AuthResponse;
 import org.serhiileniv.auth.dto.UserDto;
 import org.serhiileniv.auth.exception.InvalidCredentialsException;
 import org.serhiileniv.auth.exception.TokenException;
@@ -16,7 +16,7 @@ import org.serhiileniv.auth.model.RefreshToken;
 import org.serhiileniv.auth.model.User;
 import org.serhiileniv.auth.repository.RefreshTokenRepository;
 import org.serhiileniv.auth.repository.UserRepository;
-import org.springframework.http.HttpHeaders;
+import org.serhiileniv.auth.service.UserService.LoginResult;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
@@ -30,14 +30,10 @@ import static org.mockito.Mockito.*;
 @SuppressWarnings("null")
 class UserServiceTest {
 
-    @Mock
-    private UserRepository userRepository;
-    @Mock
-    private RefreshTokenRepository refreshTokenRepository;
-    @Mock
-    private JwtService jwtService;
-    @Mock
-    private PasswordEncoder passwordEncoder;
+    @Mock private UserRepository userRepository;
+    @Mock private RefreshTokenRepository refreshTokenRepository;
+    @Mock private JwtService jwtService;
+    @Mock private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private UserService userService;
@@ -63,11 +59,11 @@ class UserServiceTest {
         when(jwtService.generateAccessToken(any())).thenReturn("accessToken");
         when(jwtService.generateRefreshToken(any())).thenReturn("refreshToken");
 
-        AuthResponse response = userService.register(userDto);
+        LoginResult result = userService.register(userDto);
 
-        assertNotNull(response);
-        assertEquals("accessToken", response.accessToken());
-        assertEquals("refreshToken", response.refreshToken());
+        assertNotNull(result);
+        assertEquals("accessToken", result.accessToken());
+        assertEquals("refreshToken", result.refreshToken());
         verify(userRepository).save(any(User.class));
     }
 
@@ -86,10 +82,10 @@ class UserServiceTest {
         when(jwtService.generateAccessToken(user)).thenReturn("accessToken");
         when(jwtService.generateRefreshToken(user)).thenReturn("refreshToken");
 
-        AuthResponse response = userService.login(userDto);
+        LoginResult result = userService.login(userDto);
 
-        assertNotNull(response);
-        assertEquals("accessToken", response.accessToken());
+        assertNotNull(result);
+        assertEquals("accessToken", result.accessToken());
         verify(userRepository).findUserByEmail(userDto.email());
     }
 
@@ -111,24 +107,24 @@ class UserServiceTest {
     @Test
     void refreshToken_Success() {
         HttpServletRequest request = mock(HttpServletRequest.class);
-        String authHeader = "Bearer refreshToken";
-        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn(authHeader);
+        Cookie cookie = new Cookie("refresh_token", "refreshToken");
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
         when(jwtService.extractUsername("refreshToken")).thenReturn("test@example.com");
         when(refreshTokenRepository.findById("refreshToken")).thenReturn(Optional.of(new RefreshToken()));
         when(userRepository.findUserByEmail("test@example.com")).thenReturn(Optional.of(user));
         when(jwtService.isTokenValid("refreshToken", user)).thenReturn(true);
         when(jwtService.generateAccessToken(user)).thenReturn("newAccessToken");
 
-        AuthResponse response = userService.refreshToken(request);
+        LoginResult result = userService.refreshToken(request);
 
-        assertEquals("newAccessToken", response.accessToken());
-        assertEquals("refreshToken", response.refreshToken());
+        assertEquals("newAccessToken", result.accessToken());
+        assertEquals("refreshToken", result.refreshToken());
     }
 
     @Test
-    void refreshToken_MissingHeader() {
+    void refreshToken_MissingCookie() {
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn(null);
+        when(request.getCookies()).thenReturn(null);
 
         assertThrows(TokenException.class, () -> userService.refreshToken(request));
     }
@@ -136,7 +132,8 @@ class UserServiceTest {
     @Test
     void refreshToken_TokenNotFoundInRedis_ThrowsTokenException() {
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn("Bearer someRefreshToken");
+        Cookie cookie = new Cookie("refresh_token", "someRefreshToken");
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
         when(jwtService.extractUsername("someRefreshToken")).thenReturn("test@example.com");
         when(refreshTokenRepository.findById("someRefreshToken")).thenReturn(Optional.empty());
 
@@ -146,7 +143,8 @@ class UserServiceTest {
     @Test
     void refreshToken_TokenInvalid_ThrowsTokenException() {
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn("Bearer badToken");
+        Cookie cookie = new Cookie("refresh_token", "badToken");
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
         when(jwtService.extractUsername("badToken")).thenReturn("test@example.com");
         when(refreshTokenRepository.findById("badToken")).thenReturn(Optional.of(new RefreshToken()));
         when(userRepository.findUserByEmail("test@example.com")).thenReturn(Optional.of(user));
@@ -156,9 +154,10 @@ class UserServiceTest {
     }
 
     @Test
-    void logout_WithValidToken_DeletesRefreshToken() {
+    void logout_WithValidCookie_DeletesRefreshToken() {
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn("Bearer myRefreshToken");
+        Cookie cookie = new Cookie("refresh_token", "myRefreshToken");
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
         when(jwtService.extractUsername("myRefreshToken")).thenReturn("test@example.com");
 
         userService.logout(request);
@@ -167,9 +166,9 @@ class UserServiceTest {
     }
 
     @Test
-    void logout_WithNoToken_DoesNothing() {
+    void logout_WithNoCookie_DoesNothing() {
         HttpServletRequest request = mock(HttpServletRequest.class);
-        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn(null);
+        when(request.getCookies()).thenReturn(null);
 
         userService.logout(request);
 

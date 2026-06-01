@@ -2,15 +2,17 @@ package org.serhiileniv.order.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.serhiileniv.order.kafka.OrderEventProducer;
 import org.serhiileniv.order.kafka.event.OrderMatchedEvent;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
+import org.serhiileniv.order.orderbook.OrderBookManager;
+import org.serhiileniv.order.orderbook.SymbolOrderBook;
 import org.serhiileniv.order.repository.OrderRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -21,96 +23,88 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 public class OrderMatchingEngine {
+
     private final OrderRepository orderRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final OrderBookManager orderBookManager;
 
     @Transactional
     public List<OrderMatchedEvent> matchOrder(Order newOrder) {
-        log.info("Starting matching process for order: {}", newOrder.getId());
+        log.info("Starting matching for order: {}", newOrder.getId());
         List<OrderMatchedEvent> matchedEvents = new ArrayList<>();
-        List<Order> counterpartyOrders = getCounterpartyOrders(newOrder);
-        for (Order counterpartyOrder : counterpartyOrders) {
-            if (newOrder.isFullyFilled()) {
-                break;
+        SymbolOrderBook book = orderBookManager.getOrCreate(newOrder.getSymbol());
+        book.lock();
+        try {
+            List<Order> candidates = book.matchableCandidates(newOrder);
+            for (Order counterparty : candidates) {
+                if (newOrder.isFullyFilled()) break;
+                if (counterparty.getStatus() != OrderStatus.PENDING
+                        && counterparty.getStatus() != OrderStatus.PARTIALLY_FILLED) {
+                    continue;
+                }
+                if (!canMatch(newOrder, counterparty)) break;
+
+                OrderMatchedEvent event = executeMatch(newOrder, counterparty);
+                matchedEvents.add(event);
+                orderRepository.save(counterparty);
+                orderRepository.save(newOrder);
+                if (counterparty.isFullyFilled()) book.remove(counterparty);
+                applicationEventPublisher.publishEvent(event);
+                log.info("Matched {} units @ {} for trade {}", event.getQuantity(), event.getPrice(), event.getTradeId());
             }
-            if (counterpartyOrder.getStatus() != OrderStatus.PENDING
-                    && counterpartyOrder.getStatus() != OrderStatus.PARTIALLY_FILLED) {
-                continue;
-            }
-            if (!canMatch(newOrder, counterpartyOrder)) {
-                break;
-            }
-            OrderMatchedEvent matchEvent = executeMatch(newOrder, counterpartyOrder);
-            matchedEvents.add(matchEvent);
-            orderRepository.save(counterpartyOrder);
-            orderRepository.save(newOrder);
-            applicationEventPublisher.publishEvent(matchEvent);
-            log.info("Matched {} units at price {} for trade {}",
-                    matchEvent.getQuantity(), matchEvent.getPrice(), matchEvent.getTradeId());
+            if (newOrder.isFullyFilled()) book.remove(newOrder);
+        } finally {
+            book.unlock();
         }
-        log.info("Matching complete for order {}. Filled: {}/{}",
-                newOrder.getId(), newOrder.getFilledQuantity(), newOrder.getQuantity());
+        log.info("Matching done for order {}. Filled: {}/{}", newOrder.getId(), newOrder.getFilledQuantity(), newOrder.getQuantity());
         return matchedEvents;
     }
 
-    private List<Order> getCounterpartyOrders(Order order) {
-        if (order.getSide() == OrderSide.BUY) {
-            return orderRepository.findSellOrdersForMatching(order.getSymbol(), OrderSide.SELL);
-        } else {
-            return orderRepository.findBuyOrdersForMatching(order.getSymbol(), OrderSide.BUY);
-        }
+    /** Builds the order book view from the in-memory book (no DB query). */
+    public OrderBook getOrderBook(String symbol) {
+        SymbolOrderBook book = orderBookManager.getOrCreate(symbol);
+        return new OrderBook(book.getOrders(OrderSide.BUY), book.getOrders(OrderSide.SELL));
     }
 
-    private boolean canMatch(Order newOrder, Order counterpartyOrder) {
-        if (newOrder.getPrice() == null) return true;           // MARKET aggressor matches any
-        if (counterpartyOrder.getPrice() == null) return true;  // MARKET counterparty — use aggressor price
+    private boolean canMatch(Order newOrder, Order counterparty) {
+        if (newOrder.getPrice() == null) return true;
+        if (counterparty.getPrice() == null) return true;
         if (newOrder.getSide() == OrderSide.BUY) {
-            return newOrder.getPrice().compareTo(counterpartyOrder.getPrice()) >= 0;
+            return newOrder.getPrice().compareTo(counterparty.getPrice()) >= 0;
         } else {
-            return newOrder.getPrice().compareTo(counterpartyOrder.getPrice()) <= 0;
+            return newOrder.getPrice().compareTo(counterparty.getPrice()) <= 0;
         }
     }
 
-    private OrderMatchedEvent executeMatch(Order newOrder, Order counterpartyOrder) {
-        BigDecimal fillQuantity = newOrder.getRemainingQuantity()
-                .min(counterpartyOrder.getRemainingQuantity());
-        BigDecimal matchPrice = counterpartyOrder.getPrice() != null
-                ? counterpartyOrder.getPrice()
-                : newOrder.getPrice(); // fallback when counterparty is a MARKET order
-        newOrder.fill(fillQuantity);
-        counterpartyOrder.fill(fillQuantity);
-        UUID tradeId = UUID.randomUUID();
+    private OrderMatchedEvent executeMatch(Order newOrder, Order counterparty) {
+        BigDecimal fillQty   = newOrder.getRemainingQuantity().min(counterparty.getRemainingQuantity());
+        BigDecimal matchPrice = counterparty.getPrice() != null ? counterparty.getPrice() : newOrder.getPrice();
+        newOrder.fill(fillQty);
+        counterparty.fill(fillQty);
+
         OrderMatchedEvent event = new OrderMatchedEvent();
-        event.setTradeId(tradeId);
+        event.setTradeId(UUID.randomUUID());
         if (newOrder.getSide() == OrderSide.BUY) {
             event.setBuyOrderId(newOrder.getId());
-            event.setSellOrderId(counterpartyOrder.getId());
+            event.setSellOrderId(counterparty.getId());
             event.setBuyerUserId(newOrder.getUserId());
-            event.setSellerUserId(counterpartyOrder.getUserId());
+            event.setSellerUserId(counterparty.getUserId());
             event.setBuyerLimitPrice(newOrder.getPrice());
-            event.setSellerLimitPrice(counterpartyOrder.getPrice());
+            event.setSellerLimitPrice(counterparty.getPrice());
         } else {
-            event.setBuyOrderId(counterpartyOrder.getId());
+            event.setBuyOrderId(counterparty.getId());
             event.setSellOrderId(newOrder.getId());
-            event.setBuyerUserId(counterpartyOrder.getUserId());
+            event.setBuyerUserId(counterparty.getUserId());
             event.setSellerUserId(newOrder.getUserId());
-            event.setBuyerLimitPrice(counterpartyOrder.getPrice());
+            event.setBuyerLimitPrice(counterparty.getPrice());
             event.setSellerLimitPrice(newOrder.getPrice());
         }
         event.setSymbol(newOrder.getSymbol());
         event.setPrice(matchPrice);
-        event.setQuantity(fillQuantity);
+        event.setQuantity(fillQty);
         event.setTimestamp(LocalDateTime.now());
         return event;
     }
 
-    @Transactional
-    public OrderBook getOrderBook(String symbol) {
-        List<Order> buyOrders = orderRepository.findBuyOrdersForMatching(symbol, OrderSide.BUY);
-        List<Order> sellOrders = orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL);
-        return new OrderBook(buyOrders, sellOrders);
-    }
-
-    public record OrderBook(List<Order> buyOrders, List<Order> sellOrders) {
-    }
+    public record OrderBook(List<Order> buyOrders, List<Order> sellOrders) {}
 }

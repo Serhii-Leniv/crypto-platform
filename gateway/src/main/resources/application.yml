@@ -163,7 +163,7 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOrigins: "${CORS_ALLOWED_ORIGINS:http://localhost:3000}"
+            allowedOriginPatterns: "${CORS_ALLOWED_ORIGINS:http://localhost:3000}"
             allowedMethods:
               - GET
               - POST
@@ -171,7 +171,9 @@ spring:
               - DELETE
               - OPTIONS
             allowedHeaders: "*"
-            allowCredentials: false
+            exposedHeaders:
+              - Set-Cookie
+            allowCredentials: true
 
 resilience4j:
   circuitbreaker:

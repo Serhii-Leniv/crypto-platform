@@ -1,6 +1,15 @@
 export interface AuthResponse {
   accessToken: string;
-  refreshToken: string;
+}
+
+export interface PageResponse<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+  first: boolean;
+  last: boolean;
 }
 
 export interface MarketDataResponse {
@@ -61,6 +70,42 @@ export interface WalletResponse {
 export interface FundsRequest {
   currency: string;
   amount: string;
+}
+
+// ─── WebSocket message shapes (numbers, not strings) ───────────────────────
+
+export interface WsMarketDataMessage {
+  id: string;
+  symbol: string;
+  lastPrice: number;
+  volume24h: number;
+  high24h: number;
+  low24h: number;
+  priceChange24h: number;
+  priceChangePercent24h: number;
+  tradeCount24h: number;
+  updatedAt: string;
+}
+
+export interface WsPriceLevel {
+  price: number;
+  quantity: number;
+  orderCount: number;
+}
+
+export interface WsOrderBookSnapshot {
+  symbol: string;
+  bids: WsPriceLevel[];
+  asks: WsPriceLevel[];
+  timestamp: string;
+}
+
+export interface WsTradeEvent {
+  tradeId: string;
+  symbol: string;
+  price: number;
+  quantity: number;
+  timestamp: string;
 }
 
 export type TransactionType = 'DEPOSIT' | 'WITHDRAWAL' | 'LOCK' | 'UNLOCK' | 'TRADE_BUY' | 'TRADE_SELL';

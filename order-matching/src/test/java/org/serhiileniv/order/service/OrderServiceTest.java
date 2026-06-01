@@ -14,8 +14,14 @@ import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.model.OrderType;
+import org.serhiileniv.order.orderbook.OrderBookManager;
+import org.serhiileniv.order.orderbook.SymbolOrderBook;
 import org.serhiileniv.order.repository.OrderRepository;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -37,6 +43,10 @@ class OrderServiceTest {
     private OrderMatchingEngine matchingEngine;
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
+    @Mock
+    private OrderBookManager orderBookManager;
+    @Mock
+    private SymbolOrderBook symbolOrderBook;
 
     @InjectMocks
     private OrderService orderService;
@@ -68,6 +78,7 @@ class OrderServiceTest {
     void placeOrder_Success() {
         when(orderRepository.save(any(Order.class))).thenReturn(order);
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderBookManager.getOrCreate(any())).thenReturn(symbolOrderBook);
 
         OrderResponse response = orderService.placeOrder(orderRequest, userId);
 
@@ -81,6 +92,7 @@ class OrderServiceTest {
     @Test
     void cancelOrder_Success() {
         when(orderRepository.findByIdAndUserId(orderId, userId)).thenReturn(Optional.of(order));
+        when(orderBookManager.getOrCreate(any())).thenReturn(symbolOrderBook);
 
         orderService.cancelOrder(orderId, userId);
 
@@ -123,19 +135,23 @@ class OrderServiceTest {
 
     @Test
     void getUserOrders_ReturnsUserOrders() {
-        when(orderRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of(order));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(orderRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable))
+                .thenReturn(new PageImpl<>(List.of(order)));
 
-        var orders = orderService.getUserOrders(userId);
+        Page<OrderResponse> orders = orderService.getUserOrders(userId, pageable);
 
-        assertEquals(1, orders.size());
-        assertEquals(orderId, orders.get(0).id());
+        assertEquals(1, orders.getTotalElements());
+        assertEquals(orderId, orders.getContent().get(0).id());
     }
 
     @Test
     void getUserOrders_EmptyList() {
-        when(orderRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+        Pageable pageable = PageRequest.of(0, 20);
+        when(orderRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable))
+                .thenReturn(Page.empty());
 
-        var orders = orderService.getUserOrders(userId);
+        Page<OrderResponse> orders = orderService.getUserOrders(userId, pageable);
 
         assertTrue(orders.isEmpty());
     }
@@ -144,6 +160,7 @@ class OrderServiceTest {
     void cancelOrder_PartiallyFilled_Success() {
         order.setStatus(OrderStatus.PARTIALLY_FILLED);
         when(orderRepository.findByIdAndUserId(orderId, userId)).thenReturn(Optional.of(order));
+        when(orderBookManager.getOrCreate(any())).thenReturn(symbolOrderBook);
 
         orderService.cancelOrder(orderId, userId);
 
@@ -162,6 +179,7 @@ class OrderServiceTest {
                 .status(OrderStatus.PENDING).build();
         when(orderRepository.save(any())).thenReturn(marketOrder);
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(marketOrder));
+        when(orderBookManager.getOrCreate(any())).thenReturn(symbolOrderBook);
 
         OrderResponse response = orderService.placeOrder(marketRequest, userId);
 

@@ -10,8 +10,11 @@ import org.serhiileniv.order.kafka.event.OrderCancelledEvent;
 import org.serhiileniv.order.kafka.event.OrderPlacedEvent;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderStatus;
+import org.serhiileniv.order.orderbook.OrderBookManager;
 import org.serhiileniv.order.repository.OrderRepository;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
@@ -26,6 +29,7 @@ public class OrderService {
         private final OrderRepository orderRepository;
         private final OrderMatchingEngine matchingEngine;
         private final ApplicationEventPublisher applicationEventPublisher;
+        private final OrderBookManager orderBookManager;
 
         @Transactional
         public OrderResponse placeOrder(OrderRequest request, UUID userId) {
@@ -40,6 +44,7 @@ public class OrderService {
                                 .quantity(request.quantity())
                                 .build();
                 order = orderRepository.save(order);
+                orderBookManager.getOrCreate(order.getSymbol()).add(order);
                 OrderPlacedEvent placedEvent = new OrderPlacedEvent(
                                 order.getId(),
                                 order.getUserId(),
@@ -70,6 +75,7 @@ public class OrderService {
                 }
                 order.setStatus(OrderStatus.CANCELLED);
                 orderRepository.save(order);
+                orderBookManager.getOrCreate(order.getSymbol()).remove(order);
                 OrderCancelledEvent cancelledEvent = new OrderCancelledEvent(
                                 order.getId(),
                                 order.getUserId(),
@@ -91,11 +97,8 @@ public class OrderService {
         }
 
         @Transactional(readOnly = true)
-        public List<OrderResponse> getUserOrders(UUID userId) {
-                List<Order> orders = orderRepository.findByUserIdOrderByCreatedAtDesc(userId);
-                return orders.stream()
-                                .map(OrderResponse::fromEntity)
-                                .collect(Collectors.toList());
+        public Page<OrderResponse> getUserOrders(UUID userId, Pageable pageable) {
+                return orderRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable).map(OrderResponse::fromEntity);
         }
 
         @Transactional

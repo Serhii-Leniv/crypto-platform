@@ -3,6 +3,8 @@ package org.serhiileniv.order.repository;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,7 +28,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
         @Query("SELECT o FROM Order o WHERE o.symbol = :symbol AND o.side = :side AND o.status IN ('PENDING', 'PARTIALLY_FILLED') ORDER BY o.price ASC, o.createdAt ASC")
         List<Order> findSellOrdersForMatching(@Param("symbol") String symbol, @Param("side") OrderSide side);
 
-        List<Order> findByUserIdOrderByCreatedAtDesc(UUID userId);
+        List<Order> findByStatusIn(List<OrderStatus> statuses);
+
+        Page<Order> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
         @Lock(LockModeType.PESSIMISTIC_WRITE)
         Optional<Order> findByIdAndUserId(UUID id, UUID userId);

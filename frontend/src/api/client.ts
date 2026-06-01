@@ -6,6 +6,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 });
 
 apiClient.interceptors.request.use((config) => {
@@ -46,15 +47,8 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // Refresh token on 401
+    // Refresh access token on 401 using httpOnly cookie
     if (status === 401 && config && !config._retry) {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
-        tokenStore.clear();
-        window.location.href = '/login';
-        return Promise.reject(error);
-      }
-
       if (isRefreshing) {
         return new Promise((resolve) => {
           refreshQueue.push((newToken) => {
@@ -68,19 +62,15 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const res = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, null, {
-          headers: { Authorization: `Bearer ${refreshToken}` },
-        });
-        const { accessToken, refreshToken: newRefresh } = res.data;
+        const res = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, null, { withCredentials: true });
+        const { accessToken } = res.data;
         tokenStore.set(accessToken);
-        localStorage.setItem('refreshToken', newRefresh);
         refreshQueue.forEach((cb) => cb(accessToken));
         refreshQueue = [];
         config.headers.Authorization = `Bearer ${accessToken}`;
         return apiClient(config);
       } catch {
         tokenStore.clear();
-        localStorage.removeItem('refreshToken');
         window.location.href = '/login';
         return Promise.reject(error);
       } finally {

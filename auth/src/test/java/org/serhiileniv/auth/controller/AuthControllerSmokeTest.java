@@ -2,9 +2,9 @@ package org.serhiileniv.auth.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import org.serhiileniv.auth.dto.AuthResponse;
 import org.serhiileniv.auth.dto.UserDto;
 import org.serhiileniv.auth.service.UserService;
+import org.serhiileniv.auth.service.UserService.LoginResult;
 import org.serhiileniv.auth.service.JwtService;
 import org.serhiileniv.auth.security.JwtAuthenticationFilter;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -46,8 +46,7 @@ class AuthControllerSmokeTest {
     @Test
     void register_ShouldReturnOk() throws Exception {
         UserDto userDto = new UserDto("test@example.com", "password123");
-        AuthResponse response = new AuthResponse("access", "refresh");
-        when(userService.register(any())).thenReturn(response);
+        when(userService.register(any())).thenReturn(new LoginResult("access", "refresh"));
 
         mockMvc.perform(post("/api/v1/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -59,8 +58,7 @@ class AuthControllerSmokeTest {
     @Test
     void login_ShouldReturnOk() throws Exception {
         UserDto userDto = new UserDto("test@example.com", "password123");
-        AuthResponse response = new AuthResponse("access", "refresh");
-        when(userService.login(any())).thenReturn(response);
+        when(userService.login(any())).thenReturn(new LoginResult("access", "refresh"));
 
         mockMvc.perform(post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)

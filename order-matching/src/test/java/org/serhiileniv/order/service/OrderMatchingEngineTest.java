@@ -1,15 +1,17 @@
 package org.serhiileniv.order.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.serhiileniv.order.kafka.OrderEventProducer;
 import org.serhiileniv.order.kafka.event.OrderMatchedEvent;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
+import org.serhiileniv.order.orderbook.OrderBookManager;
+import org.serhiileniv.order.orderbook.SymbolOrderBook;
 import org.serhiileniv.order.repository.OrderRepository;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -31,25 +33,32 @@ class OrderMatchingEngineTest {
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
 
+    @Mock
+    private OrderBookManager orderBookManager;
+
     @InjectMocks
     private OrderMatchingEngine matchingEngine;
 
-    private String symbol = "BTC/USDT";
-    private UUID userId1 = UUID.randomUUID();
-    private UUID userId2 = UUID.randomUUID();
+    private final String symbol = "BTC/USDT";
+    private final UUID userId1 = UUID.randomUUID();
+    private final UUID userId2 = UUID.randomUUID();
+
+    private SymbolOrderBook book;
+
+    @BeforeEach
+    void setUp() {
+        book = new SymbolOrderBook(symbol);
+        when(orderBookManager.getOrCreate(symbol)).thenReturn(book);
+    }
 
     @Test
     void matchOrder_FullFill_BuyOrder() {
-        // Given: Existing sell order at 50000
         Order sellOrder = createOrder(userId2, symbol, OrderSide.SELL, "50000", "1");
-        when(orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL))
-                .thenReturn(List.of(sellOrder));
+        book.add(sellOrder);
 
-        // When: New buy order at 50000 (or higher)
         Order newBuyOrder = createOrder(userId1, symbol, OrderSide.BUY, "50000", "1");
         List<OrderMatchedEvent> matchedEvents = matchingEngine.matchOrder(newBuyOrder);
 
-        // Then
         assertEquals(1, matchedEvents.size());
         assertEquals(OrderStatus.FILLED, newBuyOrder.getStatus());
         assertEquals(OrderStatus.FILLED, sellOrder.getStatus());
@@ -62,16 +71,12 @@ class OrderMatchingEngineTest {
 
     @Test
     void matchOrder_PartialFill_BuyOrder() {
-        // Given: Existing sell order for 0.5 BTC
         Order sellOrder = createOrder(userId2, symbol, OrderSide.SELL, "50000", "0.5");
-        when(orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL))
-                .thenReturn(List.of(sellOrder));
+        book.add(sellOrder);
 
-        // When: New buy order for 1 BTC
         Order newBuyOrder = createOrder(userId1, symbol, OrderSide.BUY, "50000", "1");
         List<OrderMatchedEvent> matchedEvents = matchingEngine.matchOrder(newBuyOrder);
 
-        // Then
         assertEquals(1, matchedEvents.size());
         assertEquals(OrderStatus.PARTIALLY_FILLED, newBuyOrder.getStatus());
         assertEquals(OrderStatus.FILLED, sellOrder.getStatus());
@@ -81,17 +86,14 @@ class OrderMatchingEngineTest {
 
     @Test
     void matchOrder_MultipleCounterpartyOrders() {
-        // Given: Two sell orders at different prices
         Order sellOrder1 = createOrder(userId2, symbol, OrderSide.SELL, "49000", "0.4");
         Order sellOrder2 = createOrder(userId2, symbol, OrderSide.SELL, "50000", "0.8");
-        when(orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL))
-                .thenReturn(List.of(sellOrder1, sellOrder2));
+        book.add(sellOrder1);
+        book.add(sellOrder2);
 
-        // When: New buy order for 1 BTC at 50000
         Order newBuyOrder = createOrder(userId1, symbol, OrderSide.BUY, "50000", "1");
         List<OrderMatchedEvent> matchedEvents = matchingEngine.matchOrder(newBuyOrder);
 
-        // Then
         assertEquals(2, matchedEvents.size());
         assertEquals(OrderStatus.FILLED, newBuyOrder.getStatus());
         assertEquals(0, new BigDecimal("1").compareTo(newBuyOrder.getFilledQuantity()));
@@ -102,16 +104,12 @@ class OrderMatchingEngineTest {
 
     @Test
     void matchOrder_NoMatch_PriceTooHigh() {
-        // Given: Existing sell order at 51000
         Order sellOrder = createOrder(userId2, symbol, OrderSide.SELL, "51000", "1");
-        when(orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL))
-                .thenReturn(List.of(sellOrder));
+        book.add(sellOrder);
 
-        // When: New buy order at 50000
         Order newBuyOrder = createOrder(userId1, symbol, OrderSide.BUY, "50000", "1");
         List<OrderMatchedEvent> matchedEvents = matchingEngine.matchOrder(newBuyOrder);
 
-        // Then
         assertTrue(matchedEvents.isEmpty());
         assertEquals(OrderStatus.PENDING, newBuyOrder.getStatus());
     }
@@ -119,12 +117,11 @@ class OrderMatchingEngineTest {
     @Test
     void matchOrder_MarketBuyOrder_MatchesAtCounterpartyPrice() {
         Order sellOrder = createOrder(userId2, symbol, OrderSide.SELL, "48000", "1");
-        when(orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL))
-                .thenReturn(List.of(sellOrder));
+        book.add(sellOrder);
 
         Order marketBuy = Order.builder()
                 .id(UUID.randomUUID()).userId(userId1).symbol(symbol)
-                .side(OrderSide.BUY).price(null) // MARKET — no price limit
+                .side(OrderSide.BUY).price(null)
                 .quantity(new BigDecimal("1")).filledQuantity(BigDecimal.ZERO)
                 .status(OrderStatus.PENDING).build();
 
@@ -138,8 +135,7 @@ class OrderMatchingEngineTest {
     @Test
     void matchOrder_SellOrder_MatchesAgainstBuyOrders() {
         Order buyOrder = createOrder(userId2, symbol, OrderSide.BUY, "50000", "2");
-        when(orderRepository.findBuyOrdersForMatching(symbol, OrderSide.BUY))
-                .thenReturn(List.of(buyOrder));
+        book.add(buyOrder);
 
         Order newSellOrder = createOrder(userId1, symbol, OrderSide.SELL, "50000", "2");
         List<OrderMatchedEvent> events = matchingEngine.matchOrder(newSellOrder);
@@ -153,9 +149,6 @@ class OrderMatchingEngineTest {
 
     @Test
     void matchOrder_EmptyOrderBook_NoEvents() {
-        when(orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL))
-                .thenReturn(List.of());
-
         Order buyOrder = createOrder(userId1, symbol, OrderSide.BUY, "50000", "1");
         List<OrderMatchedEvent> events = matchingEngine.matchOrder(buyOrder);
 
@@ -169,8 +162,8 @@ class OrderMatchingEngineTest {
         Order cancelledSell = createOrder(userId2, symbol, OrderSide.SELL, "50000", "1");
         cancelledSell.setStatus(OrderStatus.CANCELLED);
         Order validSell = createOrder(userId2, symbol, OrderSide.SELL, "50000", "1");
-        when(orderRepository.findSellOrdersForMatching(symbol, OrderSide.SELL))
-                .thenReturn(List.of(cancelledSell, validSell));
+        book.add(cancelledSell);
+        book.add(validSell);
 
         Order buyOrder = createOrder(userId1, symbol, OrderSide.BUY, "50000", "1");
         List<OrderMatchedEvent> events = matchingEngine.matchOrder(buyOrder);
@@ -178,14 +171,13 @@ class OrderMatchingEngineTest {
         assertEquals(1, events.size());
         assertEquals(OrderStatus.FILLED, buyOrder.getStatus());
         assertEquals(OrderStatus.FILLED, validSell.getStatus());
-        assertEquals(OrderStatus.CANCELLED, cancelledSell.getStatus()); // unchanged
+        assertEquals(OrderStatus.CANCELLED, cancelledSell.getStatus());
     }
 
     @Test
     void matchOrder_SellBelowBuyPrice_NoMatch() {
         Order buyOrder = createOrder(userId2, symbol, OrderSide.BUY, "45000", "1");
-        when(orderRepository.findBuyOrdersForMatching(symbol, OrderSide.BUY))
-                .thenReturn(List.of(buyOrder));
+        book.add(buyOrder);
 
         Order sellOrder = createOrder(userId1, symbol, OrderSide.SELL, "48000", "1");
         List<OrderMatchedEvent> events = matchingEngine.matchOrder(sellOrder);

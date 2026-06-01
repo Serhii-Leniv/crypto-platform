@@ -55,22 +55,22 @@ function fmtDate(iso: string) {
 export default function TransactionsPage() {
   const [page, setPage] = useState(0);
 
-  const { data, isLoading, error } = useQuery<TransactionResponse[]>({
-    queryKey: ['transactions'],
-    queryFn: getTransactions,
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['transactions', page],
+    queryFn: () => getTransactions(page, PAGE_SIZE),
     refetchInterval: 10000,
   });
 
-  const totalPages = data ? Math.ceil(data.length / PAGE_SIZE) : 0;
-  const pageData   = data ? data.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE) : [];
+  const totalPages = data?.totalPages ?? 0;
+  const pageData   = data?.content ?? [];
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold" style={{ color: '#e2e8f0' }}>Transaction History</h2>
-        {data && data.length > 0 && (
+        {pageData.length > 0 && (
           <button
-            onClick={() => exportCSV(data)}
+            onClick={() => exportCSV(pageData)}
             className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
             style={{ border: '1px solid #3c4049', background: '#252930', color: '#9ca3af' }}
             onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = '#e2e8f0'}
@@ -85,7 +85,7 @@ export default function TransactionsPage() {
       {isLoading && <Spinner />}
       {error && <p className="text-sm" style={{ color: '#f6465d' }}>Failed to load transactions.</p>}
 
-      {data && (
+      {(data || isLoading === false) && (
         <>
           <div className="rounded-xl overflow-hidden mb-4" style={{ border: '1px solid #3c4049' }}>
             <table className="w-full text-sm">
@@ -153,7 +153,7 @@ export default function TransactionsPage() {
             <div className="flex items-center gap-2 justify-end">
               <button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
+                disabled={data?.first ?? page === 0}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-30"
                 style={{ border: '1px solid #3c4049', background: '#252930', color: '#9ca3af' }}
               >
@@ -165,7 +165,7 @@ export default function TransactionsPage() {
               </span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
+                disabled={data?.last ?? page >= totalPages - 1}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-30"
                 style={{ border: '1px solid #3c4049', background: '#252930', color: '#9ca3af' }}
               >

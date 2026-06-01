@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -122,8 +123,8 @@ class OrderServiceIntegrationTest {
                 "ETH/USDT", OrderType.LIMIT, OrderSide.SELL,
                 new BigDecimal("3000"), new BigDecimal("5")), userId);
 
-        var orders = orderService.getUserOrders(userId);
+        var orders = orderService.getUserOrders(userId, PageRequest.of(0, 20));
 
-        assertEquals(2, orders.size());
+        assertEquals(2, orders.getTotalElements());
     }
 }

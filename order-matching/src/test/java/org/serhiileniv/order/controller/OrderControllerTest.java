@@ -24,6 +24,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -115,12 +118,13 @@ class OrderControllerTest {
 
     @Test
     void getUserOrders_Returns200() throws Exception {
-        when(orderService.getUserOrders(USER_ID)).thenReturn(List.of(sampleResponse()));
+        when(orderService.getUserOrders(eq(USER_ID), any()))
+                .thenReturn(new PageImpl<>(List.of(sampleResponse())));
 
         mockMvc.perform(get("/api/v1/orders")
                         .header("X-User-Id", USER_ID.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].symbol").value("BTC-USDT"));
+                .andExpect(jsonPath("$.content[0].symbol").value("BTC-USDT"));
     }
 
     @Test

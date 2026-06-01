@@ -6,12 +6,15 @@ import org.serhiileniv.order.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.data.domain.Page;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Collections;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -29,7 +32,7 @@ class OrderControllerSmokeTest {
     @Test
     void getUserOrders_ShouldReturnOk() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(orderService.getUserOrders(userId)).thenReturn(Collections.emptyList());
+        when(orderService.getUserOrders(eq(userId), any())).thenReturn(Page.empty());
 
         mockMvc.perform(get("/api/v1/orders")
                 .header("X-User-Id", userId.toString()))
