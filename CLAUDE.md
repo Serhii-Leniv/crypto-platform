@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Workflow — ALWAYS FOLLOW
+
+Every commit must be authored as **Serhii Leniv**, without exception:
+
+```bash
+GIT_AUTHOR_NAME="Serhii Leniv" GIT_AUTHOR_EMAIL="leniv.tech@gmail.com" \
+GIT_COMMITTER_NAME="Serhii Leniv" GIT_COMMITTER_EMAIL="leniv.tech@gmail.com" \
+git commit -m "feat: ..."
+```
+
+- **Never commit to `main` directly** — use a feature branch.
+- **Push after completing work** — never leave unpushed commits.
+- **Conventional Commits**: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `ci:` — present tense, no trailing period.
+- **Before merging to main**: squash WIP commits so each commit on main is self-contained.
+
 ## Build & Test Commands
 
 ```bash
@@ -46,13 +61,19 @@ Maven multi-module project — one parent `pom.xml` with five Spring Boot child 
 
 | Module | Port | Role |
 |---|---|---|
-| `gateway` | 8080 | Spring Cloud Gateway — single entry point, JWT filter, CORS |
-| `auth` | 8081 | Registration, login, JWT issuance, refresh token rotation |
-| `order-matching` | 8082 | Order book, price-time-priority matching engine, Kafka producer |
-| `wallet` | 8083 | Wallet balances, fund locking/unlocking, Kafka consumer |
-| `market-data` | 8084 | 24h trade stats, public market data, Kafka consumer + Redis cache |
+| `gateway` | 8080 | Spring Cloud Gateway — single entry point, JWT filter, CORS, rate limiting, circuit breakers |
+| `auth` | 8081 | Registration, login, JWT issuance, refresh token (httpOnly cookie) |
+| `order-matching` | 8082 | In-memory order book, price-time-priority matching engine, Kafka producer |
+| `wallet` | 8083 | Wallet balances, fund locking/unlocking (saga pattern), Kafka consumer |
+| `market-data` | 8084 | 24h trade stats, WebSocket broadcast, Kafka consumer + Redis cache |
 
-**Infrastructure:** Single PostgreSQL instance with separate databases per service (`auth_db`, `order_db`, `wallet_db`, `market_db`). Two Redis instances: `redis-cache` (:6379) for auth refresh tokens, `redis-market` (:6380) for market data cache.
+**Infrastructure:** 4 separate PostgreSQL containers (one per service):
+- `postgres-auth` :5432 → `auth_db`
+- `postgres-order` :5433 → `order_db`
+- `postgres-wallet` :5434 → `wallet_db`
+- `postgres-market` :5435 → `market_db`
+
+Two Redis instances: `redis-cache` (:6379) for auth refresh tokens, `redis-market` (:6380) for market data cache.
 
 ## Naming Conventions
 
@@ -69,16 +90,25 @@ The gateway validates JWTs **before** forwarding requests. `gateway/JwtAuthentic
 
 Routes `/api/v1/auth/**` and `/api/v1/market-data/**` are public. All other routes require the `JwtAuthenticationFilter` gateway filter.
 
-JWT access tokens expire in 15 min (900000 ms); refresh tokens expire in 7 days. Refresh tokens are stored in Redis and are revocable on logout.
+CORS is configured with `allowCredentials: true` and `allowedOriginPatterns` (wildcard origins are incompatible with credentials).
 
-## Order Matching & Kafka Events
+JWT access tokens expire in 15 min (900000 ms); refresh tokens expire in 7 days. **Refresh tokens are stored as an httpOnly cookie** (`refresh_token`, Path `/api/v1/auth`) — never in localStorage. `AuthResponse` body contains only `accessToken`. On mount, the frontend calls `/api/v1/auth/refresh` to restore the session from the cookie.
+
+## Order Matching & In-Memory Order Book
+
+`SymbolOrderBook` holds bids (`TreeMap<BigDecimal, ArrayDeque<Order>>` reversed) and asks (natural order) per symbol, protected by a `ReentrantLock`. `OrderBookManager` (`ConcurrentHashMap`) manages all books. `OrderBookInitializer` (ApplicationRunner) loads all `PENDING`/`PARTIALLY_FILLED` orders from the DB on startup.
 
 Order placement in `OrderService` follows this sequence:
 1. Persist the order to PostgreSQL.
-2. Publish `OrderPlacedEvent` → Kafka topic `order-events`.
-3. Synchronously invoke `OrderMatchingEngine.matchOrder()`.
-4. If a match is found, publish `OrderMatchedEvent` → `order-events`.
-5. On cancel, publish `OrderCancelledEvent` → `order-events`.
+2. Add to in-memory book: `orderBookManager.getOrCreate(symbol).add(order)`.
+3. Publish `OrderPlacedEvent` → Kafka topic `order-events`.
+4. Synchronously invoke `OrderMatchingEngine.matchOrder()`.
+5. If a match is found, publish `OrderMatchedEvent` → `order-events`.
+6. On cancel, remove from book and publish `OrderCancelledEvent` → `order-events`.
+
+`getOrderBook()` reads directly from the in-memory book — no DB query.
+
+## Kafka Events
 
 Both `wallet` and `market-data` consume from `order-events` in separate consumer groups. Event type discrimination uses the `eventType` field: `ORDER_PLACED`, `ORDER_MATCHED`, `ORDER_CANCELLED`.
 
@@ -92,9 +122,19 @@ Idempotency is enforced via a `ProcessedEvent` table in the wallet service — e
 
 Symbol format is `BASE-QUOTE` (e.g., `BTC-USDT`), split on `/` or `-`.
 
+## Pagination
+
+All list endpoints return `Page<T>` with `page`/`size` query params; max page size 100. Frontend uses React Query with `queryKey: ['key', page]`.
+
+## WebSocket
+
+STOMP over SockJS. Gateway routes `/ws/market-data/**` → market-data, `/ws/orderbook/**` → order-matching. Frontend hooks: `useMarketDataSocket`, `useOrderBookSocket` (reconnect delay 5s). Topics: `/topic/orderbook/{symbol}`, `/topic/trades/{symbol}`, `/topic/market-data`.
+
 ## Key Design Notes
 
 - **Lombok + MapStruct**: annotation processor order matters — `lombok-mapstruct-binding` is declared in the parent POM's compiler plugin. Always keep Lombok before MapStruct in `annotationProcessorPaths`.
 - **DDL**: `spring.jpa.hibernate.ddl-auto=update` in all services. Schema evolves automatically — no migration tool.
 - **JWT secret must match** across gateway, auth, order-matching, and wallet services. All four read from the `JWT_SECRET_KEY` env var / `application.security.jwt.secret-key` property.
 - **Tests use Mockito mocks** — no embedded DB or Testcontainers. Smoke tests (`*SmokeTest`) use `@SpringBootTest` with `@MockBean` for infrastructure.
+- **No comments** unless the WHY is non-obvious. Never describe what the code does.
+- **Validate at system boundaries** only — `@Valid` on controller params, not inside services.

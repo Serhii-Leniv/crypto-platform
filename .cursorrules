@@ -1,115 +1,120 @@
-# Cursor Rules — Trading Exchange Platform
+# Cursor Rules — Crypto Exchange Platform
 
-## Project Overview
-Microservices crypto trading platform. Maven multi-module parent `crypto-exchange` with five Spring Boot 3 / Java 21 services and a React 18 + TypeScript frontend.
+## Git Workflow — MUST FOLLOW
+
+- **Every commit must be authored as Serhii Leniv:**
+  ```bash
+  GIT_AUTHOR_NAME="Serhii Leniv" GIT_AUTHOR_EMAIL="leniv.tech@gmail.com" \
+  GIT_COMMITTER_NAME="Serhii Leniv" GIT_COMMITTER_EMAIL="leniv.tech@gmail.com" \
+  git commit -m "..."
+  ```
+- **Never commit directly to `main`** — use feature branches, then merge.
+- **Push after finishing work** — no unpushed local commits.
+- **Conventional Commits**: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `ci:` — present tense, no period.
+- **Before merging to main**: squash WIP commits so every commit on main is self-contained and meaningful.
 
 ## Module Structure
-```
-auth/           → Authentication Service     (port 8081, org.serhiileniv.auth)
-gateway/        → API Gateway                (port 8080, org.serhiileniv.gateway)
-order-matching/ → Order Matching Service     (port 8082, org.serhiileniv.order)
-wallet/         → Wallet Service             (port 8083, org.serhiileniv.wallet)
-market-data/    → Market Data Service        (port 8084, org.serhiileniv.marketdata)
-frontend/       → React SPA                  (port 3000, exchange-ui)
-```
 
-## Naming Conventions
+Maven multi-module, parent `crypto-exchange`, Java 21, Spring Boot 3.4.5:
 
-### Java
-- Packages: `org.serhiileniv.<module>` — no `crypto` prefix inside packages
-- Main classes: `AuthApplication`, `GatewayApplication`, `OrderMatchingApplication`, `WalletApplication`, `MarketDataApplication`
-- Services: `UserService`, `WalletService`, `OrderService`, `MarketDataService` — never prefix with module name
-- Repositories: `UserRepository`, `WalletRepository`, `OrderRepository` — extend `JpaRepository`
-- DTOs: `AuthResponse`, `WalletResponse`, `OrderRequest`, `OrderResponse` — suffix with Request/Response
-- Events: `OrderPlacedEvent`, `OrderMatchedEvent`, `OrderCancelledEvent` — always include `eventType` field
-- Controllers: `AuthController`, `WalletController`, `OrderController` — prefix `@RequestMapping("/api/v1/<resource>")`
+| Module | Port | Package |
+|---|---|---|
+| `gateway` | 8080 | `org.serhiileniv.gateway` |
+| `auth` | 8081 | `org.serhiileniv.auth` |
+| `order-matching` | 8082 | `org.serhiileniv.order` |
+| `wallet` | 8083 | `org.serhiileniv.wallet` |
+| `market-data` | 8084 | `org.serhiileniv.marketdata` |
+| `frontend` | 3000 | React 18 + TypeScript + Vite |
 
-### Spring app names (application.properties)
-- `auth-service`, `api-gateway`, `order-matching-service`, `wallet-service`, `market-data-service`
+## Infrastructure (Docker)
 
-### Kafka
-- Topic: `order-events`
-- Consumer groups: `wallet-group`, `market-data-group`
-- Event discrimination: `eventType` field (STRING) — `ORDER_PLACED` | `ORDER_MATCHED` | `ORDER_CANCELLED`
-
-### Docker containers
-- `auth-service`, `api-gateway`, `order-matching-service`, `wallet-service`, `market-data-service`
-- Infrastructure: `postgres`, `redis-auth`, `redis-market`, `kafka`, `zookeeper`, `pgadmin`
-
-### Frontend (TypeScript/React)
-- Components: PascalCase — `PlaceOrderPage`, `OrderBookPage`, `ToastContext`
-- API functions: camelCase — `placeOrder`, `getWallets`, `cancelOrder`
-- Types: PascalCase interfaces — `OrderResponse`, `WalletResponse`, `MarketDataResponse`
-- Hooks: `use` prefix — `useToast`, `useAuth`
+- **4 separate PostgreSQL** containers (each service has its own DB):
+  - `postgres-auth` :5432 → `auth_db`
+  - `postgres-order` :5433 → `order_db`
+  - `postgres-wallet` :5434 → `wallet_db`
+  - `postgres-market` :5435 → `market_db`
+- **2 Redis**: `redis-cache` (:6379) for auth tokens, `redis-market` (:6380) for market data
+- Kafka (KRaft), Zipkin, Prometheus, Grafana, pgAdmin
 
 ## Architecture Rules
 
 ### Gateway
-- ALL requests enter through gateway (port 8080)
-- JWT validated by `JwtAuthenticationFilter` before forwarding
-- `userId` extracted from JWT claim and injected as `X-User-Id` header
-- Services MUST read user identity from `X-User-Id`, never re-parse JWT (except wallet)
+- Single entry point for all requests. JWT validated by `JwtAuthenticationFilter`.
+- Extracts `userId` from JWT → injects `X-User-Id` header into downstream requests.
+- Downstream services read identity from `X-User-Id`, never re-parse JWT (except wallet).
 - Public routes: `/api/v1/auth/**`, `/api/v1/market-data/**`
+- CORS: `allowCredentials: true`, `allowedOriginPatterns` (required for credentials).
 
-### Auth Service
-- BCrypt password hashing — never store plaintext
-- Access token: 15 min TTL, contains `userId` claim
-- Refresh token: 7 days TTL, stored in Redis (`redis-cache`), revocable on logout
-- JWT secret key shared across: gateway, auth, order-matching, wallet — via `JWT_SECRET_KEY` env var
+### Auth / Session
+- **Refresh token = httpOnly cookie** (`refresh_token`, Path `/api/v1/auth`), never in localStorage.
+- **Access token = JS memory only** (`tokenStore`), never localStorage — XSS mitigation.
+- `AuthResponse` body contains `accessToken` only; refresh token travels only in cookie.
+- JWT secret shared across gateway, auth, order-matching, wallet via `JWT_SECRET_KEY` env var.
+- On mount: frontend calls `/api/v1/auth/refresh` to restore session from cookie.
 
-### Order Matching
-- Order placement sequence: persist → publish OrderPlacedEvent → matchOrder() → publish OrderMatchedEvent (if matched)
-- Matching engine uses pessimistic write lock on counterparty order queries
-- BUY matches when buyPrice >= sellPrice; SELL matches when sellPrice <= buyPrice
-- MARKET orders match any counterparty price
+### Order Matching — In-Memory Order Book
+- `SymbolOrderBook`: `TreeMap<BigDecimal, ArrayDeque<Order>>` for bids (reverse) and asks, one `ReentrantLock` per symbol.
+- `OrderBookManager`: `ConcurrentHashMap<symbol, SymbolOrderBook>`, `getOrCreate()` is the only access point.
+- `OrderBookInitializer`: loads all `PENDING`/`PARTIALLY_FILLED` orders from DB on startup.
+- Match cycle: acquire lock → `matchableCandidates()` → execute matches → `remove()` filled orders → release lock.
+- `getOrderBook()` reads from in-memory book — no DB query.
 
-### Wallet (Saga Pattern)
-- `ORDER_PLACED` → lock funds (quote currency for BUY, base for SELL)
-- `ORDER_MATCHED` → settle trade: debitLocked from payer, deposit to receiver
-- `ORDER_CANCELLED` → unlock funds
-- Idempotency: check `ProcessedEvent` table before processing any Kafka event
-- Symbol parsing: `BTC-USDT` splits on `/` or `-` → [base, quote]
+### Kafka Saga (Wallet)
+- `ORDER_PLACED` → lock funds (quote for BUY, base for SELL)
+- `ORDER_MATCHED` → transfer funds between buyer and seller atomically
+- `ORDER_CANCELLED` → unlock previously locked funds
+- Idempotency enforced via `ProcessedEvent` table — skip if already processed.
 
-### Market Data
-- Consumes `ORDER_MATCHED` events only
-- Updates: `lastPrice`, `high24h`, `low24h`, `volume24h`, `tradeCount24h`
-- `priceChangePercent24h` = `(lastPrice - openPrice24h) / openPrice24h * 100`
-- Cached in Redis (`redis-market`) with 10-minute TTL; evicted on every trade
-- Daily reset at midnight UTC via `@Scheduled(cron = "0 0 0 * * *")`
+### Pagination
+- Always server-side. Return `Page<T>` from controllers with `page`/`size` query params, max size 100.
+- Frontend uses React Query with `queryKey: ['key', page]`; page state is `useState(0)`.
 
-## Code Style
+### WebSocket
+- STOMP over SockJS. Topics: `/topic/orderbook/{symbol}`, `/topic/trades/{symbol}`, `/topic/market-data`.
+- Gateway routes: `/ws/market-data/**` → market-data service, `/ws/orderbook/**` → order-matching.
+- Frontend hooks: `useMarketDataSocket`, `useOrderBookSocket` — reconnect delay 5s.
 
-### Java
-- Use Lombok: `@Data`, `@Builder`, `@RequiredArgsConstructor`, `@Slf4j`
-- Lombok before MapStruct in annotationProcessorPaths (order matters)
-- `@Transactional` on service methods that write to DB
-- Log with `log.info()`/`log.error()` — never `System.out.println`
-- Return types: use DTOs from controllers, never expose entities directly
+## Java Code Style
 
-### Testing
-- Unit tests: Mockito mocks only — no embedded DB, no Testcontainers
-- Smoke tests (`*SmokeTest`): `@SpringBootTest` + `@MockBean` for infrastructure
-- Always set `eventType` field in Kafka event test fixtures
+- **Lombok** everywhere: `@Data`, `@Builder`, `@RequiredArgsConstructor`, `@Slf4j`. No boilerplate.
+- **Records** for DTOs, events, and immutable value objects.
+- **MapStruct** for entity↔DTO. Keep Lombok before MapStruct in `annotationProcessorPaths`.
+- No comments unless the WHY is non-obvious. Never describe what code does.
+- `@Transactional` only on methods that write to DB.
+- Validate at controller boundary (`@Valid`), not inside services.
+- Throw domain exceptions (`OrderNotFoundException`, `InsufficientFundsException`) — `@RestControllerAdvice` handles HTTP mapping.
+- Log with `log.info()`/`log.warn()`/`log.error()` — never `System.out.println`.
 
-### Frontend
-- Access token: store in JS memory only (tokenStore), never localStorage — XSS mitigation
-- Refresh token: localStorage — survives page refresh
-- API calls: always via `apiClient` (Axios instance with interceptors)
-- Errors: use `err.userMessage` (set by interceptor) over raw `err.message`
-- Mutations: invalidate related queries on success
+## TypeScript / React Style
+
+- Functional components only, no class components.
+- `type` for non-extendable shapes, `interface` for extensible.
+- API functions → `src/api/`, hooks → `src/hooks/`, types → `src/types/index.ts`.
+- React Query for all server state. No raw `useEffect` for data fetching.
+- `withCredentials: true` on all API calls (httpOnly cookie).
+- All calls via `apiClient` (Axios with interceptors) — never raw `axios.get/post`.
+- Use `err.userMessage` (set by interceptor), not raw `err.message`.
+
+## Testing
+
+- Unit tests: Mockito only — no embedded DB, no Testcontainers.
+- `*SmokeTest`: `@SpringBootTest` + `@MockitoBean` for infrastructure.
+- Always `mvn -B test -pl <module>` after changing a module before committing.
 
 ## Build Commands
+
 ```bash
-mvn -B clean verify                              # full build + tests
-mvn -B clean package -DskipTests                # build only
-mvn -B test -pl wallet                           # single module tests
-docker compose up --build                        # full stack
-docker compose config                            # validate compose file
+mvn -B clean verify                   # full build + tests
+mvn -B clean package -DskipTests      # build only
+mvn -B test -pl order-matching        # single module tests
+docker compose up --build             # full stack
 ```
 
-## Key Invariants — Never Break These
-1. `JWT_SECRET_KEY` must be identical in gateway, auth, order-matching, wallet
-2. All Kafka events must include `eventType` field — consumers switch on it
-3. Wallet events must be idempotent — always check ProcessedEvent before acting
-4. Lombok must come before MapStruct in annotationProcessorPaths
-5. `ddl-auto=update` — no manual schema migrations, Hibernate manages schema
+## Key Invariants — Never Break
+
+1. `JWT_SECRET_KEY` identical in gateway, auth, order-matching, wallet
+2. All Kafka events must have `eventType` field — consumers switch on it
+3. Wallet Kafka processing must be idempotent — check `ProcessedEvent` first
+4. Lombok before MapStruct in `annotationProcessorPaths`
+5. `ddl-auto=update` — no manual migrations
+6. Order book lock must be held for the entire match cycle (candidates → match → remove)
