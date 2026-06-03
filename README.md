@@ -11,7 +11,7 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-ready-326CE5?style=flat-square&logo=kubernetes&logoColor=white)](k8s/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-A **production-grade cryptocurrency exchange platform** built on a microservices architecture. The system handles user authentication, order placement and matching, wallet management, and real-time market data — all communicating asynchronously through Apache Kafka.
+A **production-grade cryptocurrency exchange platform** built on a microservices architecture. The system handles user authentication, real-exchange order placement (LIMIT / MARKET / STOP_LIMIT with GTC, IOC, FOK, POST_ONLY time-in-force), price-time-priority matching with self-trade prevention, atomic synchronous wallet settlement, and real-time market data over WebSocket — with Apache Kafka used as an informational analytics stream.
 
 ---
 
@@ -36,20 +36,29 @@ A **production-grade cryptocurrency exchange platform** built on a microservices
 
 | Feature | Details |
 |---|---|
-| **JWT Authentication** | Stateless access tokens (15 min) + Redis-backed refresh token rotation (7 days) |
-| **Price-Time Priority Engine** | In-memory order book — LIMIT and MARKET orders, BUY/SELL sides |
-| **Saga Pattern** | Distributed atomic fund locking/unlocking via Kafka events |
-| **Event-Driven Architecture** | `ORDER_PLACED → ORDER_MATCHED → ORDER_CANCELLED` fan-out over Kafka |
+| **JWT Authentication** | Stateless access tokens (15 min) + httpOnly refresh-token cookie with rotation (7 days) |
+| **Real-Exchange Matching** | Price-time-priority in-memory order book — `LIMIT`, `MARKET`, `STOP_LIMIT`; `ReentrantLock` per symbol |
+| **Time-in-Force** | `GTC` (default), `IOC`, `FOK`, `POST_ONLY` — all enforced before / after match with compensating unlocks |
+| **Synchronous Fund Lock** | Order-matching calls wallet-service `/internal/wallets/lock` via REST **before** the order enters the book — no trading on credit |
+| **Atomic 4-Wallet Settlement** | A single `@Transactional` `/internal/wallets/settle` moves base + quote between buyer and seller and applies maker/taker fees |
+| **Self-Trade Prevention** | Matching engine skips counterparties owned by the same user |
+| **Maker / Taker Fees** | Configurable per trading pair in basis points (bps), deducted from the received asset |
+| **Trading-Pair Registry** | DB-backed whitelist with `tick_size` and `min_quantity` validation on every order |
+| **Stop Orders** | `STOP_LIMIT` parked as `TRIGGER_PENDING`; `StopOrderMonitor` activates when market price crosses `trigger_price` |
+| **Buyer-Slippage Refund** | Settlement unlocks the difference between buyer limit price and execution price on every fill |
+| **Demo Seed** | `SPRING_PROFILES_ACTIVE=dev` seeds 3 users (alice/bob/charlie, `Password1`), wallets, trading pairs, and open orders |
+| **WebSocket Market Data** | STOMP over SockJS — `/topic/orderbook/{symbol}`, `/topic/trades/{symbol}`, `/topic/market-data` |
+| **Truthful 24 h Stats** | Aggregated from a `trades` table every 30 s, cached in Redis with midnight eviction |
 | **Circuit Breaker** | Resilience4j circuit breakers on all gateway routes — fail-fast with graceful fallbacks |
 | **Distributed Tracing** | Micrometer Tracing + Zipkin — full request trace across every microservice |
-| **Market Data Cache** | 24 h rolling stats (last, high, low, volume, trades) in Redis with midnight eviction |
 | **Rate Limiting** | Redis-backed token-bucket rate limiter on auth endpoints at the gateway |
-| **API Gateway** | Single entry point — JWT filter, `X-User-Id` injection, CORS, rate limiting |
+| **API Gateway** | Single entry point — JWT filter, `X-User-Id` injection, CORS, rate limiting, circuit breaker |
 | **Virtual Threads** | All four WebMVC services run on Java 21 virtual threads |
-| **Flyway Migrations** | Schema versioning on every service database — no manual DDL |
+| **Flyway Migrations** | Versioned schema + repeatable seed scripts on every service DB |
+| **DLQ + Replay** | Kafka business failures retried with exponential backoff, then routed to DLT; failed events visible in the admin panel for manual replay |
 | **OpenAPI / Swagger UI** | Interactive docs at `/swagger-ui.html` on every service |
 | **Prometheus + Grafana** | Pre-provisioned metrics dashboard, one `docker compose up` away |
-| **Fully Dockerized** | One-command startup — infra and all five services |
+| **Fully Dockerized** | One-command startup — infra and all five services + frontend |
 | **Kubernetes Ready** | Deployment manifests, Services, and Ingress in `k8s/` |
 
 ---
@@ -58,28 +67,31 @@ A **production-grade cryptocurrency exchange platform** built on a microservices
 
 ```mermaid
 graph TD
-    Client["Browser / Mobile Client"]
+    Client["Browser / Frontend (React)"]
 
     subgraph Gateway["API Gateway :8080"]
-        JWTFilter["JWT Filter\n+ X-User-Id inject"]
-        RateLimit["Rate Limiter\n(Redis token bucket)"]
-        CB["Circuit Breaker\n(Resilience4j)"]
+        JWTFilter["JWT Filter + X-User-Id inject"]
+        RateLimit["Rate Limiter (Redis token bucket)"]
+        CB["Circuit Breaker (Resilience4j)"]
     end
 
     subgraph Services["Microservices"]
-        Auth["Auth Service :8081\nPostgreSQL · Redis\nFlyway"]
-        Order["Order-Matching :8082\nPostgreSQL · Kafka Producer\nFlyway"]
-        Wallet["Wallet Service :8083\nPostgreSQL · Kafka Consumer\nFlyway"]
-        Market["Market-Data :8084\nPostgreSQL · Redis Cache\nKafka Consumer · Flyway"]
+        Auth["Auth Service :8081"]
+        Order["Order-Matching :8082<br/>In-memory book + ReentrantLock"]
+        Wallet["Wallet Service :8083<br/>/internal/wallets/{lock,unlock,settle}"]
+        Market["Market-Data :8084<br/>WebSocket + 24h aggregator"]
     end
 
     subgraph Infra["Infrastructure"]
-        Kafka["Apache Kafka\n(KRaft, order-events)"]
-        PG["PostgreSQL 15\n4 separate databases"]
-        Redis1["Redis :6379\nAuth refresh tokens"]
-        Redis2["Redis :6380\nMarket data cache"]
-        Zipkin["Zipkin :9411\nDistributed Tracing"]
-        Prometheus["Prometheus :9090"]
+        Kafka["Apache Kafka (KRaft)<br/>order-events — analytics"]
+        PGAuth["postgres-auth :5432<br/>auth_db"]
+        PGOrder["postgres-order :5433<br/>order_db"]
+        PGWallet["postgres-wallet :5434<br/>wallet_db"]
+        PGMarket["postgres-market :5435<br/>market_db"]
+        RedisAuth["Redis :6379<br/>Auth refresh tokens"]
+        RedisMkt["Redis :6380<br/>Market-data cache"]
+        Zipkin["Zipkin :9411"]
+        Prom["Prometheus :9090"]
         Grafana["Grafana :3001"]
     end
 
@@ -89,17 +101,17 @@ graph TD
     Gateway --> Wallet
     Gateway --> Market
 
-    Order -->|OrderPlacedEvent\nOrderMatchedEvent\nOrderCancelledEvent| Kafka
-    Kafka -->|wallet-group| Wallet
+    Order -->|sync REST<br/>lock / settle / unlock| Wallet
+    Order -->|OrderPlaced / OrderMatched / OrderCancelled| Kafka
     Kafka -->|market-data-group| Market
 
-    Auth --> Redis1
-    Auth --> PG
-    Order --> PG
-    Wallet --> PG
-    Market --> PG
-    Market --> Redis2
-    Gateway --> Redis1
+    Auth --> PGAuth
+    Auth --> RedisAuth
+    Gateway --> RedisAuth
+    Order --> PGOrder
+    Wallet --> PGWallet
+    Market --> PGMarket
+    Market --> RedisMkt
 
     Auth -.->|traces| Zipkin
     Order -.->|traces| Zipkin
@@ -107,21 +119,22 @@ graph TD
     Market -.->|traces| Zipkin
     Gateway -.->|traces| Zipkin
 
-    Auth -.->|metrics| Prometheus
-    Order -.->|metrics| Prometheus
-    Wallet -.->|metrics| Prometheus
-    Market -.->|metrics| Prometheus
-    Gateway -.->|metrics| Prometheus
-    Prometheus -.-> Grafana
+    Auth -.->|metrics| Prom
+    Order -.->|metrics| Prom
+    Wallet -.->|metrics| Prom
+    Market -.->|metrics| Prom
+    Gateway -.->|metrics| Prom
+    Prom -.-> Grafana
 ```
 
 ### Request Flow
 
-1. Every request hits the **API Gateway** (`8080`).
-2. `JwtAuthenticationFilter` validates the `Authorization: Bearer <token>` header for protected routes and injects the `X-User-Id` header downstream.
-3. Public routes (`/api/v1/auth/**`, `/api/v1/market-data/**`) bypass JWT validation.
-4. Each route is wrapped by a **Resilience4j circuit breaker** — if a service is down, the gateway returns a graceful `503` within milliseconds instead of hanging threads.
-5. Micrometer Tracing injects trace/span IDs into every request. All spans are collected by **Zipkin** for end-to-end latency analysis.
+1. Every request hits the **API Gateway** (`8080`). Public routes (`/api/v1/auth/**`, `/api/v1/market-data/**`) bypass JWT validation.
+2. `JwtAuthenticationFilter` validates `Authorization: Bearer <token>` and injects an `X-User-Id` header downstream.
+3. Each route is wrapped in a **Resilience4j circuit breaker** — if a downstream is unhealthy, the gateway short-circuits to a fast `503`.
+4. **Order placement is synchronous end-to-end**: `OrderService` pre-generates the order ID, calls `walletClient.lock()` (REST → wallet `/internal/wallets/lock`), then inserts into the in-memory book, then matches under the per-symbol lock. Each match calls `walletClient.settle()` which performs the atomic 4-wallet transfer (buyer-base, buyer-quote, seller-base, seller-quote + fees) in a single wallet-service transaction.
+5. Kafka events (`order-events`) are emitted **after** the in-memory state is consistent — they are an informational stream consumed by `market-data` for analytics. The wallet service no longer consumes order events (its listener is a deliberate no-op, kept for consumer-group offset hygiene).
+6. Micrometer Tracing injects `traceId`/`spanId` headers across every hop (HTTP and Kafka). Spans are exported to **Zipkin**.
 
 ---
 
@@ -172,7 +185,15 @@ cp .env.example .env
 docker compose up --build
 ```
 
-All microservices start after the infrastructure (Postgres, Kafka, Redis) reports healthy.
+All microservices start after the infrastructure (4× Postgres, 2× Redis, Kafka) reports healthy. The demo seed (`SPRING_PROFILES_ACTIVE=dev`) runs automatically via Flyway repeatable migrations on first boot.
+
+**Demo credentials** (all passwords are `Password1`):
+
+| Email | Role |
+|---|---|
+| `alice@demo.io` | Admin (sees the admin panel + failed-events DLQ) |
+| `bob@demo.io` | Trader |
+| `charlie@demo.io` | Trader |
 
 ### Verify the Stack
 
@@ -228,8 +249,10 @@ All requests are routed through the **API Gateway** on port `8080`. Protected ro
 
 **Response**:
 ```json
-{ "accessToken": "eyJ...", "refreshToken": "eyJ..." }
+{ "accessToken": "eyJ..." }
 ```
+
+The **refresh token** is set as an `httpOnly`, `Secure`-on-prod cookie (`refresh_token`, `Path=/api/v1/auth`). The frontend never reads it from JS — `POST /api/v1/auth/refresh` restores the session from the cookie.
 
 ---
 
@@ -246,15 +269,31 @@ All requests are routed through the **API Gateway** on port `8080`. Protected ro
 **Place order request body**:
 ```json
 {
-  "symbol": "BTC-USDT",
-  "side": "BUY",
-  "orderType": "LIMIT",
-  "quantity": 0.1,
-  "price": 45000.00
+  "symbol":        "BTC-USDT",
+  "side":          "BUY",
+  "orderType":     "LIMIT",
+  "quantity":      0.1,
+  "price":         45000.00,
+  "timeInForce":   "GTC",
+  "triggerPrice":  null
 }
 ```
 
-`side`: `BUY` | `SELL` &nbsp;·&nbsp; `orderType`: `LIMIT` | `MARKET` &nbsp;·&nbsp; Symbol: `BASE-QUOTE` or `BASE/QUOTE`
+- `side`: `BUY` | `SELL`
+- `orderType`: `LIMIT` | `MARKET` | `STOP_LIMIT`
+- `timeInForce` (LIMIT only): `GTC` (default) | `IOC` | `FOK` | `POST_ONLY`
+- `triggerPrice`: required for `STOP_LIMIT`, otherwise null
+- `symbol`: `BASE-QUOTE` or `BASE/QUOTE` (must exist in the `trading_pairs` registry; price must be a multiple of `tick_size`)
+- `MARKET BUY` is rejected (no price ceiling to lock against); `MARKET SELL` is supported
+
+**Error responses**:
+
+| Status | Cause |
+|---|---|
+| `400 InvalidSymbol` | Symbol not listed, below `min_quantity`, or not a `tick_size` multiple |
+| `409 Insufficient` | Wallet refused the synchronous lock |
+| `409 PostOnlyRejected` | `POST_ONLY` order would cross the book |
+| `409 FokRejected` | `FOK` order cannot be fully filled at placement |
 
 ---
 
@@ -278,6 +317,23 @@ All requests are routed through the **API Gateway** on port `8080`. Protected ro
 | GET | `/` | No | List 24 h stats for all symbols |
 | GET | `/{symbol}` | No | Get 24 h stats for a specific symbol |
 
+WebSocket (STOMP over SockJS, served by `market-data` and `order-matching`):
+
+| Topic | Source |
+|---|---|
+| `/topic/market-data` | Broadcast on every 24 h aggregator tick |
+| `/topic/orderbook/{symbol}` | Broadcast on every book mutation |
+| `/topic/trades/{symbol}` | Broadcast on every match |
+
+### Admin — `/api/v1/admin`
+
+Available to authenticated users; in `dev` profile the demo `alice` account is treated as admin.
+
+| Method | Path | Description |
+|---|---|---|
+| GET  | `/failed-events` | Dead-letter queue: Kafka events that exceeded retries |
+| POST | `/failed-events/{id}/replay` | Manually replay a single failed event |
+
 **Response**:
 ```json
 {
@@ -295,42 +351,79 @@ All requests are routed through the **API Gateway** on port `8080`. Protected ro
 
 ## Order Matching
 
-The engine uses **price-time priority**:
+Price-time priority over an in-memory book. The path is fully synchronous so the API caller knows whether the order was accepted, rejected, locked, matched, and settled by the time the HTTP response returns.
 
-1. A `LIMIT BUY` order for `BTC-USDT` at `45,000` is persisted to PostgreSQL.
-2. An `OrderPlacedEvent` is published to the `order-events` Kafka topic. The wallet service immediately **locks** the required USDT balance.
-3. The matching engine scans open `SELL` orders sorted by price ascending, then by `created_at` (time priority).
-4. The first SELL order with `price ≤ 45,000` is matched at the resting (SELL) price.
-5. An `OrderMatchedEvent` is published. The wallet service **atomically transfers** funds between buyer and seller.
-6. The market-data service updates 24 h stats and evicts the Redis cache entry.
+### Place a LIMIT BUY at 45,000 USDT for 0.1 BTC-USDT
 
-Partial fills are supported — an order moves to `PARTIALLY_FILLED` and remains in the book until fully consumed or cancelled.
+1. `OrderService.placeOrder()` validates the symbol against `trading_pairs` (whitelist, tick size, min quantity).
+2. A fresh `orderId = UUID.randomUUID()` is generated locally so it can be referenced before persistence.
+3. `walletClient.lock(userId, "USDT", 4500, orderId)` calls `POST /internal/wallets/lock` on wallet-service. The wallet service runs the lock inside a `@Transactional` `PESSIMISTIC_WRITE` and returns `200` or `409 Insufficient`. A failure here aborts placement before the order ever exists.
+4. The order is persisted with `status = PENDING` (`Persistable<UUID>` keeps Spring Data on the `INSERT` path).
+5. **Time-in-force gates run before the book accepts the order:**
+   - `POST_ONLY` → reject if the limit would cross the top of the opposite side (compensating unlock fires).
+   - `FOK` → scan the opposite side respecting STP; reject unless the full quantity can be filled (compensating unlock fires).
+6. The order is added to the per-symbol `SymbolOrderBook` (`TreeMap<BigDecimal, ArrayDeque<Order>>`) under its `ReentrantLock`.
+7. `OrderMatchingEngine.matchOrder()` walks the opposite side. For every match candidate:
+   - **STP**: skip if `counterparty.userId == newOrder.userId`.
+   - `executeMatch()` updates the in-memory fill quantities of both orders.
+   - `walletClient.settle()` runs the 4-wallet transfer + maker/taker fees in a single wallet-service transaction. If settle throws, the matching transaction rolls back and the caller sees the failure synchronously.
+   - Both orders are saved; fully filled counterparties are removed from the book.
+   - `OrderMatchedEvent` is published to Kafka (informational, for market-data).
+8. `OrderPlacedEvent` is published to Kafka (also informational).
+9. **IOC** cancels any unfilled remainder after matching and fires a compensating unlock.
+10. The HTTP response carries the final order status (`PENDING`, `PARTIALLY_FILLED`, `FILLED`, or `CANCELLED`).
 
-Idempotency is enforced via a `processed_events` table in the wallet service — duplicate Kafka events keyed by `orderId`/`tradeId` are discarded.
+### `STOP_LIMIT`
+
+Persisted as `TRIGGER_PENDING` (never enters the book at placement). Funds are still locked synchronously. A `@Scheduled` `StopOrderMonitor` polls last prices every 3 s; when a BUY-stop sees `lastPrice >= triggerPrice` (or a SELL-stop sees `lastPrice <= triggerPrice`), the order flips to `PENDING`, is added to the book, and matched in the normal path.
+
+### Cancel
+
+`OrderService.cancelOrder()` flips status to `CANCELLED`, removes the order from the book, and calls `walletClient.unlock()` to return the remaining locked quantity in one shot.
+
+### Slippage refund
+
+When a buyer is matched below its limit, settlement computes `(buyerLimitPrice − executionPrice) × quantity` in quote currency and unlocks it back to the buyer in the same wallet-service transaction.
+
+### Idempotency
+
+`processed_events` in wallet-service has a composite `(event_id, event_type)` unique index so the same `orderId` can appear for both `ORDER_PLACED` and `ORDER_CANCELLED` without collisions, while replays of the same event are silently skipped.
 
 ---
 
 ## Design Decisions
 
-### Why Kafka over REST calls between services?
+### Why synchronous REST for fund locking instead of Kafka?
 
-Synchronous REST between services creates tight coupling and cascading failures — if the wallet service is slow, order placement blocks too. Kafka decouples producers from consumers, giving independent scalability, natural backpressure, and a durable audit trail of every event.
+The earlier design locked funds asynchronously via `OrderPlacedEvent` → Kafka → wallet consumer. That left a window where an order was visible to the matching engine before its funds were actually reserved — effectively allowing trades on credit. Real exchanges (Binance, Coinbase) lock funds atomically with order acceptance. The current path calls `wallet-service` over REST inside `OrderService.placeOrder()`; the order is only persisted and added to the book after the lock succeeds. Kafka remains in the picture as an **informational** stream (consumed by `market-data`) — it is no longer a critical correctness dependency.
 
-### Why a Saga over a distributed transaction?
+### Why one atomic settlement transaction instead of four events?
 
-XA/2PC distributed transactions require all participants to be available and add coordinator overhead. The Saga pattern breaks the transaction into local steps (`LOCK → TRANSFER → UNLOCK`) each published as an event. Compensating events (`OrderCancelledEvent → UNLOCK`) handle failures without a central coordinator.
+`OrderMatched` originally fanned out four separate wallet movements: buyer-base, buyer-quote, seller-base, seller-quote. If the consumer crashed between two of them the wallets stayed inconsistent. The single `/internal/wallets/settle` endpoint applies all four credits/debits, the maker/taker fees, and the buyer slippage refund inside one `@Transactional` block — either all of it lands or none of it does.
+
+### Why a separate Postgres per service?
+
+Each service owns its schema. Sharing a single Postgres makes schema changes a coordination problem and a single migration mistake can take the whole platform down. Four separate `postgres-*` containers (`postgres-auth`, `postgres-order`, `postgres-wallet`, `postgres-market`) give each service independent migration history, independent failure domains, and the freedom to vacuum / index without affecting the others.
+
+### Why an in-memory order book with `ReentrantLock` per symbol?
+
+A SQL-backed book at trading load would serialize every match through the database. The in-memory `SymbolOrderBook` (`TreeMap<BigDecimal, ArrayDeque<Order>>`) gives O(log n) best-price lookup and O(1) FIFO at each price level under a single per-symbol `ReentrantLock`. PostgreSQL is still the durable source of truth — `OrderBookInitializer` (`ApplicationRunner`) replays all open orders into the book at startup.
 
 ### Why Circuit Breakers at the gateway?
 
-Wrapping every downstream route in a Resilience4j circuit breaker means a failing service causes fast failures at the gateway edge — open circuits return `503` in microseconds rather than holding open HTTP connections for 30 s. This prevents thread-pool exhaustion under partial failure.
+Resilience4j wraps every downstream route. If a service is unhealthy, the gateway returns a fast `503` instead of holding HTTP connections open for 30 s — this prevents thread-pool exhaustion and keeps the rest of the platform responsive.
 
 ### Why two Redis instances?
 
-Auth refresh tokens and market data have completely different eviction strategies: auth tokens are evicted by TTL on logout, while market data is evicted at midnight or on trade. Separate instances isolate configuration and prevent a market-data cache flush from affecting auth token lookups.
+Auth refresh tokens and market data have completely different eviction strategies — auth tokens are evicted by TTL or logout, market data is evicted at midnight or on a fresh trade. Separate instances isolate configuration and prevent a market-data flush from clobbering live login sessions.
 
 ### Why Flyway over `ddl-auto=create`?
 
-`ddl-auto=update` is fine for prototyping but silently drops columns on rename and cannot be applied to production without risk. Flyway provides versioned, repeatable, reviewable SQL migrations with a full history in the `flyway_schema_history` table.
+`ddl-auto=update` is fine for prototyping but silently drops columns on rename and cannot be applied to production without risk. Flyway provides versioned, repeatable, reviewable SQL migrations with a full history in `flyway_schema_history` per service.
+
+### Why `dev` and `prod` Spring profiles?
+
+`SPRING_PROFILES_ACTIVE=dev` (the default in `.env.example`) runs repeatable Flyway seeds (`R__seed_*.sql`) that populate 3 demo users (alice / bob / charlie, password `Password1`), their wallets, trading pairs, and open orders — clone, `docker compose up`, and the platform has data to trade against. `prod` skips the seed and tightens log levels.
 
 ---
 
@@ -444,15 +537,15 @@ Copy `.env.example` to `.env` before starting. The only variable that **must** b
 
 ```
 crypto-platform/
-├── auth/                   # Registration, login, JWT issuance, refresh token rotation
+├── auth/                   # Registration, login, JWT issuance, refresh-token cookie rotation
 ├── gateway/                # Spring Cloud Gateway — routing, JWT filter, circuit breaker, CORS
-├── order-matching/         # Order book, price-time-priority matching engine, Kafka producer
-├── wallet/                 # Wallet balances, fund locking/unlocking, Kafka consumer (Saga)
-├── market-data/            # 24 h trade stats, Redis cache, Kafka consumer
-├── frontend/               # React 19 + TypeScript + TailwindCSS
+├── order-matching/         # In-memory book, matching engine, sync WalletClient, StopOrderMonitor
+├── wallet/                 # Balances, /internal/wallets/{lock,unlock,settle}, DLQ + replay
+├── market-data/            # 24 h aggregator, WebSocket broadcast, Redis cache, Kafka consumer
+├── frontend/               # React 19 + TS + TailwindCSS — "Kairos Capital" trading UI + admin panel
 ├── k8s/                    # Kubernetes deployment manifests
-├── docker/                 # PostgreSQL init scripts, Prometheus config, Grafana provisioning
-├── docker-compose.yml      # Full stack — infra + all five services + Zipkin + Grafana
+├── docker/                 # PostgreSQL init, Prometheus config, Grafana provisioning
+├── docker-compose.yml      # Full stack — 4× postgres, 2× redis, Kafka, Zipkin, Prom/Grafana, all 5 services + frontend
 └── pom.xml                 # Parent Maven POM (Java 21, Spring Boot 3.4.5)
 ```
 
