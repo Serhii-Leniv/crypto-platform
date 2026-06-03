@@ -3,6 +3,7 @@ package org.serhiileniv.gateway.config;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import reactor.core.publisher.Mono;
 
 import java.util.Objects;
@@ -23,8 +24,12 @@ public class RateLimiterConfig {
     /**
      * User-based key for authenticated endpoints (orders, wallet).
      * Falls back to IP when X-User-Id is absent so unauthenticated probes are still limited.
+     * Marked @Primary so Spring Cloud Gateway's RequestRateLimiterGatewayFilterFactory
+     * can resolve a single default KeyResolver; per-route resolvers are still selected
+     * by name via SpEL (e.g. #{@ipKeyResolver}) in application.yml.
      */
     @Bean
+    @Primary
     public KeyResolver userKeyResolver() {
         return exchange -> {
             String userId = exchange.getRequest().getHeaders().getFirst("X-User-Id");

@@ -46,7 +46,7 @@ class AuthControllerSmokeTest {
     @Test
     void register_ShouldReturnOk() throws Exception {
         UserDto userDto = new UserDto("test@example.com", "password123");
-        when(userService.register(any())).thenReturn(new LoginResult("access", "refresh"));
+        when(userService.register(any())).thenReturn(new LoginResult("access", "refresh", false));
 
         mockMvc.perform(post("/api/v1/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -58,7 +58,7 @@ class AuthControllerSmokeTest {
     @Test
     void login_ShouldReturnOk() throws Exception {
         UserDto userDto = new UserDto("test@example.com", "password123");
-        when(userService.login(any())).thenReturn(new LoginResult("access", "refresh"));
+        when(userService.login(any())).thenReturn(new LoginResult("access", "refresh", false));
 
         mockMvc.perform(post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)

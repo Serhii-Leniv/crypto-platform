@@ -1,7 +1,10 @@
 package org.serhiileniv.order.model;
+
 public enum OrderStatus {
-    PENDING, 
-    PARTIALLY_FILLED, 
-    FILLED, 
-    CANCELLED 
+    /** Stop order awaiting trigger — funds locked, not yet in the matching book. */
+    TRIGGER_PENDING,
+    PENDING,
+    PARTIALLY_FILLED,
+    FILLED,
+    CANCELLED
 }

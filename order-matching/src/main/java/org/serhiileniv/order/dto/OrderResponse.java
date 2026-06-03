@@ -3,6 +3,7 @@ import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.model.OrderType;
+import org.serhiileniv.order.model.TimeInForce;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -16,6 +17,8 @@ public record OrderResponse(
         BigDecimal quantity,
         BigDecimal filledQuantity,
         OrderStatus status,
+        TimeInForce timeInForce,
+        BigDecimal triggerPrice,
         LocalDateTime createdAt,
         LocalDateTime updatedAt) {
     public static OrderResponse fromEntity(Order order) {
@@ -29,6 +32,8 @@ public record OrderResponse(
                 order.getQuantity(),
                 order.getFilledQuantity(),
                 order.getStatus(),
+                order.getTimeInForce(),
+                order.getTriggerPrice(),
                 order.getCreatedAt(),
                 order.getUpdatedAt());
     }

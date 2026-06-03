@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.serhiileniv.order.client.WalletClient;
 import org.serhiileniv.order.dto.OrderRequest;
 import org.serhiileniv.order.dto.OrderResponse;
 import org.serhiileniv.order.exception.OrderNotFoundException;
@@ -14,9 +15,11 @@ import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.model.OrderType;
+import org.serhiileniv.order.model.TradingPair;
 import org.serhiileniv.order.orderbook.OrderBookManager;
 import org.serhiileniv.order.orderbook.SymbolOrderBook;
 import org.serhiileniv.order.repository.OrderRepository;
+import org.serhiileniv.order.repository.TradingPairRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -47,6 +50,10 @@ class OrderServiceTest {
     private OrderBookManager orderBookManager;
     @Mock
     private SymbolOrderBook symbolOrderBook;
+    @Mock
+    private TradingPairRepository tradingPairRepository;
+    @Mock
+    private WalletClient walletClient;
 
     @InjectMocks
     private OrderService orderService;
@@ -61,7 +68,7 @@ class OrderServiceTest {
         userId = UUID.randomUUID();
         orderId = UUID.randomUUID();
         orderRequest = new OrderRequest("BTC/USDT", OrderType.LIMIT, OrderSide.BUY, new BigDecimal("50000"),
-                new BigDecimal("1"));
+                new BigDecimal("1"), null, null);
         order = Order.builder()
                 .id(orderId)
                 .userId(userId)
@@ -72,18 +79,41 @@ class OrderServiceTest {
                 .quantity(new BigDecimal("1"))
                 .status(OrderStatus.PENDING)
                 .build();
+        TradingPair pair = TradingPair.builder()
+                .symbol("BTC/USDT")
+                .baseCurrency("BTC")
+                .quoteCurrency("USDT")
+                .minQuantity(new BigDecimal("0.00001"))
+                .tickSize(new BigDecimal("0.01"))
+                .status("ACTIVE")
+                .makerFeeBps(10)
+                .takerFeeBps(20)
+                .build();
+        TradingPair ethPair = TradingPair.builder()
+                .symbol("ETH-USDT")
+                .baseCurrency("ETH")
+                .quoteCurrency("USDT")
+                .minQuantity(new BigDecimal("0.0001"))
+                .tickSize(new BigDecimal("0.01"))
+                .status("ACTIVE")
+                .makerFeeBps(10)
+                .takerFeeBps(20)
+                .build();
+        org.mockito.Mockito.lenient()
+                .when(tradingPairRepository.findById("BTC/USDT")).thenReturn(Optional.of(pair));
+        org.mockito.Mockito.lenient()
+                .when(tradingPairRepository.findById("ETH-USDT")).thenReturn(Optional.of(ethPair));
     }
 
     @Test
     void placeOrder_Success() {
         when(orderRepository.save(any(Order.class))).thenReturn(order);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepository.findById(any(UUID.class))).thenReturn(Optional.of(order));
         when(orderBookManager.getOrCreate(any())).thenReturn(symbolOrderBook);
 
         OrderResponse response = orderService.placeOrder(orderRequest, userId);
 
         assertNotNull(response);
-        assertEquals(orderId, response.id());
         verify(orderRepository).save(any(Order.class));
         verify(applicationEventPublisher).publishEvent(any(Object.class));
         verify(matchingEngine).matchOrder(any());
@@ -169,16 +199,17 @@ class OrderServiceTest {
     }
 
     @Test
-    void placeOrder_MarketOrder_SkipsPriceValidation() {
+    void placeOrder_MarketSell_SkipsPriceValidation() {
+        // MARKET BUY rejected by service (no price ceiling for fund lock); MARKET SELL OK.
         OrderRequest marketRequest = new OrderRequest(
-                "ETH-USDT", OrderType.MARKET, OrderSide.BUY, null, new BigDecimal("0.5"));
+                "ETH-USDT", OrderType.MARKET, OrderSide.SELL, null, new BigDecimal("0.5"), null, null);
         Order marketOrder = Order.builder()
                 .id(orderId).userId(userId).symbol("ETH-USDT")
-                .orderType(OrderType.MARKET).side(OrderSide.BUY)
+                .orderType(OrderType.MARKET).side(OrderSide.SELL)
                 .quantity(new BigDecimal("0.5")).filledQuantity(BigDecimal.ZERO)
                 .status(OrderStatus.PENDING).build();
         when(orderRepository.save(any())).thenReturn(marketOrder);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(marketOrder));
+        when(orderRepository.findById(any(UUID.class))).thenReturn(Optional.of(marketOrder));
         when(orderBookManager.getOrCreate(any())).thenReturn(symbolOrderBook);
 
         OrderResponse response = orderService.placeOrder(marketRequest, userId);

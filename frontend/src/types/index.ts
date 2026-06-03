@@ -1,5 +1,6 @@
 export interface AuthResponse {
   accessToken: string;
+  isAdmin?: boolean;
 }
 
 export interface PageResponse<T> {
@@ -25,9 +26,10 @@ export interface MarketDataResponse {
   updatedAt: string;
 }
 
-export type OrderType = 'LIMIT' | 'MARKET';
+export type OrderType = 'LIMIT' | 'MARKET' | 'STOP_LIMIT';
 export type OrderSide = 'BUY' | 'SELL';
-export type OrderStatus = 'PENDING' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELLED';
+export type OrderStatus = 'PENDING' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELLED' | 'TRIGGER_PENDING';
+export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'POST_ONLY';
 
 export interface OrderResponse {
   id: string;
@@ -39,6 +41,8 @@ export interface OrderResponse {
   quantity: string;
   filledQuantity: string;
   status: OrderStatus;
+  timeInForce?: TimeInForce;
+  triggerPrice?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +58,8 @@ export interface PlaceOrderRequest {
   side: OrderSide;
   price?: string;
   quantity: string;
+  timeInForce?: TimeInForce;
+  triggerPrice?: string;
 }
 
 export interface WalletResponse {

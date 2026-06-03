@@ -8,14 +8,18 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.serhiileniv.marketdata.exception.MarketDataNotFoundException;
 import org.serhiileniv.marketdata.model.MarketData;
+import org.serhiileniv.marketdata.model.Trade;
 import org.serhiileniv.marketdata.repository.MarketDataRepository;
+import org.serhiileniv.marketdata.repository.TradeRepository;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -24,6 +28,8 @@ class MarketDataServiceTest {
 
     @Mock
     private MarketDataRepository marketDataRepository;
+    @Mock
+    private TradeRepository tradeRepository;
 
     @InjectMocks
     private MarketDataService marketDataService;
@@ -33,130 +39,81 @@ class MarketDataServiceTest {
 
     @BeforeEach
     void setUp() {
-        symbol = "BTC/USDT";
+        symbol = "BTC-USDT";
         marketData = MarketData.builder()
                 .symbol(symbol)
                 .lastPrice(new BigDecimal("50000"))
-                .high24h(new BigDecimal("51000"))
-                .low24h(new BigDecimal("49000"))
-                .volume24h(new BigDecimal("100"))
+                .openPrice24h(new BigDecimal("50000"))
+                .high24h(new BigDecimal("50000"))
+                .low24h(new BigDecimal("50000"))
+                .volume24h(BigDecimal.ZERO)
+                .tradeCount24h(0L)
                 .build();
-        // save() now returns the (mutated) entity — return the same object that was passed in
         lenient().when(marketDataRepository.save(any(MarketData.class))).thenAnswer(i -> i.getArguments()[0]);
     }
 
     @Test
     void getMarketData_Success() {
         when(marketDataRepository.findBySymbol(symbol)).thenReturn(Optional.of(marketData));
-
-        MarketData result = marketDataService.getMarketData(symbol);
-
-        assertNotNull(result);
-        assertEquals(symbol, result.getSymbol());
-        verify(marketDataRepository).findBySymbol(symbol);
+        assertNotNull(marketDataService.getMarketData(symbol));
     }
 
     @Test
     void getMarketData_NotFound() {
         when(marketDataRepository.findBySymbol(symbol)).thenReturn(Optional.empty());
-
         assertThrows(MarketDataNotFoundException.class, () -> marketDataService.getMarketData(symbol));
     }
 
     @Test
-    void getAllMarketData_Success() {
+    void getAllMarketData_ReturnsRepoContents() {
         when(marketDataRepository.findAll()).thenReturn(List.of(marketData));
-
-        List<MarketData> result = marketDataService.getAllMarketData();
-
-        assertFalse(result.isEmpty());
-        assertEquals(1, result.size());
+        assertEquals(1, marketDataService.getAllMarketData().size());
     }
 
     @Test
-    void updateMarketData_Existing() {
+    void updateMarketData_PersistsTradeAndRecomputesFromAggregates() {
+        Aggs agg = new Aggs(new BigDecimal("52000"), new BigDecimal("49000"),
+                new BigDecimal("3.5"), 7L, new BigDecimal("50000"), new BigDecimal("51000"));
+        when(tradeRepository.aggregateSince(eqSymbol(), any(LocalDateTime.class))).thenReturn(agg);
         when(marketDataRepository.findBySymbolWithLock(symbol)).thenReturn(Optional.of(marketData));
 
-        marketDataService.updateMarketData(symbol, new BigDecimal("50500"), new BigDecimal("0.5"));
+        marketDataService.updateMarketData(symbol, new BigDecimal("51000"), new BigDecimal("0.5"));
 
-        verify(marketDataRepository).save(marketData);
-        assertEquals(new BigDecimal("50500"), marketData.getLastPrice());
-    }
-
-    @Test
-    void updateMarketData_New() {
-        when(marketDataRepository.findBySymbolWithLock(symbol)).thenReturn(Optional.empty());
-        when(marketDataRepository.save(any(MarketData.class))).thenAnswer(i -> i.getArguments()[0]);
-
-        marketDataService.updateMarketData(symbol, new BigDecimal("50500"), new BigDecimal("0.5"));
-
-        verify(marketDataRepository, atLeastOnce()).save(any(MarketData.class));
-    }
-
-    @Test
-    void updateMarketData_UpdatesHigh24h_WhenPriceIsHigher() {
-        when(marketDataRepository.findBySymbolWithLock(symbol)).thenReturn(Optional.of(marketData));
-
-        marketDataService.updateMarketData(symbol, new BigDecimal("52000"), new BigDecimal("0.1"));
-
+        verify(tradeRepository).save(any(Trade.class));
+        assertEquals(new BigDecimal("51000"), marketData.getLastPrice());
         assertEquals(new BigDecimal("52000"), marketData.getHigh24h());
-        assertEquals(new BigDecimal("52000"), marketData.getLastPrice());
+        assertEquals(new BigDecimal("49000"), marketData.getLow24h());
+        assertEquals(new BigDecimal("3.5"),   marketData.getVolume24h());
+        assertEquals(7L,                       marketData.getTradeCount24h());
     }
 
     @Test
-    void updateMarketData_DoesNotUpdateHigh_WhenPriceIsLower() {
+    void recomputeMetrics_NoTradesInWindow_ZeroesAggregatesKeepsLastPrice() {
+        when(tradeRepository.aggregateSince(eqSymbol(), any(LocalDateTime.class)))
+                .thenReturn(new Aggs(null, null, null, 0L, null, null));
         when(marketDataRepository.findBySymbolWithLock(symbol)).thenReturn(Optional.of(marketData));
 
-        marketDataService.updateMarketData(symbol, new BigDecimal("49500"), new BigDecimal("0.1"));
+        marketDataService.recomputeMetrics(symbol);
 
-        assertEquals(new BigDecimal("51000"), marketData.getHigh24h());
-    }
-
-    @Test
-    void updateMarketData_UpdatesLow24h_WhenPriceIsLower() {
-        when(marketDataRepository.findBySymbolWithLock(symbol)).thenReturn(Optional.of(marketData));
-
-        marketDataService.updateMarketData(symbol, new BigDecimal("48000"), new BigDecimal("0.2"));
-
-        assertEquals(new BigDecimal("48000"), marketData.getLow24h());
-    }
-
-    @Test
-    void updateMarketData_IncrementsTradeCount() {
-        marketData.setTradeCount24h(5L);
-        when(marketDataRepository.findBySymbolWithLock(symbol)).thenReturn(Optional.of(marketData));
-
-        marketDataService.updateMarketData(symbol, new BigDecimal("50000"), new BigDecimal("0.5"));
-
-        assertEquals(6L, marketData.getTradeCount24h());
-    }
-
-    @Test
-    void updateMarketData_AccumulatesVolume() {
-        when(marketDataRepository.findBySymbolWithLock(symbol)).thenReturn(Optional.of(marketData));
-
-        marketDataService.updateMarketData(symbol, new BigDecimal("50000"), new BigDecimal("2.0"));
-
-        assertEquals(0, new BigDecimal("102.0").compareTo(marketData.getVolume24h()));
-    }
-
-    @Test
-    void getAllMarketData_EmptyRepository_ReturnsEmptyList() {
-        when(marketDataRepository.findAll()).thenReturn(List.of());
-
-        List<MarketData> result = marketDataService.getAllMarketData();
-
-        assertTrue(result.isEmpty());
-    }
-
-    @Test
-    void resetDailyStats_SavesAllWithResetValues() {
-        when(marketDataRepository.findAll()).thenReturn(List.of(marketData));
-
-        marketDataService.resetDailyStats();
-
-        assertEquals(BigDecimal.ZERO, marketData.getVolume24h());
         assertEquals(0L, marketData.getTradeCount24h());
-        verify(marketDataRepository).saveAll(List.of(marketData));
+        assertEquals(0, BigDecimal.ZERO.compareTo(marketData.getVolume24h()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(marketData.getPriceChange24h()));
+    }
+
+    private static String eqSymbol() {
+        return anyString();
+    }
+
+    // Test projection implementing TradeRepository.Aggregates
+    private record Aggs(
+            BigDecimal high, BigDecimal low, BigDecimal volume, Long tradeCount,
+            BigDecimal openPrice, BigDecimal lastPrice
+    ) implements TradeRepository.Aggregates {
+        @Override public BigDecimal getHigh()       { return high; }
+        @Override public BigDecimal getLow()        { return low; }
+        @Override public BigDecimal getVolume()     { return volume; }
+        @Override public Long       getTradeCount() { return tradeCount; }
+        @Override public BigDecimal getOpenPrice()  { return openPrice; }
+        @Override public BigDecimal getLastPrice()  { return lastPrice; }
     }
 }

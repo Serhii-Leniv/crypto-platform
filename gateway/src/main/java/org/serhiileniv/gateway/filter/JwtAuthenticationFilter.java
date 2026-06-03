@@ -16,6 +16,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 @Component
@@ -26,6 +27,12 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
 
     public JwtAuthenticationFilter() {
         super(Config.class);
+    }
+
+    @Override
+    public List<String> shortcutFieldOrder() {
+        // Allows YAML shorthand `- JwtAuthenticationFilter` AND `- JwtAuthenticationFilter=true`
+        return List.of("requireAdmin");
     }
 
     @Override
@@ -51,8 +58,14 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                 } catch (IllegalArgumentException e) {
                     return onError(exchange, "Invalid userId format in token", HttpStatus.UNAUTHORIZED);
                 }
+                Boolean isAdmin = claims.get("isAdmin", Boolean.class);
+                boolean admin = isAdmin != null && isAdmin;
+                if (config.isRequireAdmin() && !admin) {
+                    return onError(exchange, "Admin role required", HttpStatus.FORBIDDEN);
+                }
                 ServerHttpRequest modifiedRequest = exchange.getRequest().mutate()
                         .header("X-User-Id", userId)
+                        .header("X-User-Admin", String.valueOf(admin))
                         .build();
                 return chain.filter(exchange.mutate().request(modifiedRequest).build());
             } catch (Exception e) {
@@ -83,5 +96,13 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
     }
 
     public static class Config {
+        private boolean requireAdmin;
+
+        public boolean isRequireAdmin() {
+            return requireAdmin;
+        }
+        public void setRequireAdmin(boolean requireAdmin) {
+            this.requireAdmin = requireAdmin;
+        }
     }
 }

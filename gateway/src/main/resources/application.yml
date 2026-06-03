@@ -126,6 +126,58 @@ spring:
                 name: market-cb
                 fallbackUri: forward:/fallback/market-data
 
+        # Markets registry (Public) — trading-pair whitelist served by order-matching.
+        # No JWT: clients must be able to fetch the list of tradable symbols before login
+        # to populate selectors. Validation that enforces the list runs server-side on order placement.
+        - id: markets
+          uri: ${ORDER_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/markets/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                key-resolver: "#{@ipKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: order-cb
+                fallbackUri: forward:/fallback/orders
+
+        # Admin — users registry (auth-service). requireAdmin gates by isAdmin JWT claim.
+        - id: admin-users
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/admin/users
+          filters:
+            - JwtAuthenticationFilter=true
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: auth-cb
+                fallbackUri: forward:/fallback/auth
+
+        # Admin — orders + markets management (order-matching). Same admin gate.
+        - id: admin-orders
+          uri: ${ORDER_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/admin/orders,/api/v1/admin/markets/**
+          filters:
+            - JwtAuthenticationFilter=true
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: order-cb
+                fallbackUri: forward:/fallback/orders
+
         # WebSocket — Market Data real-time feed (public)
         - id: ws-market-data
           uri: ${MARKET_SERVICE_URL:http://localhost:8084}

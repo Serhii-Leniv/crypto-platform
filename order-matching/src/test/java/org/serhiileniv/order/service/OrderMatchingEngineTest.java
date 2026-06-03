@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.serhiileniv.order.client.WalletClient;
 import org.serhiileniv.order.kafka.event.OrderMatchedEvent;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
@@ -13,6 +14,7 @@ import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.orderbook.OrderBookManager;
 import org.serhiileniv.order.orderbook.SymbolOrderBook;
 import org.serhiileniv.order.repository.OrderRepository;
+import org.serhiileniv.order.repository.TradingPairRepository;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
@@ -35,6 +37,12 @@ class OrderMatchingEngineTest {
 
     @Mock
     private OrderBookManager orderBookManager;
+
+    @Mock
+    private WalletClient walletClient;
+
+    @Mock
+    private TradingPairRepository tradingPairRepository;
 
     @InjectMocks
     private OrderMatchingEngine matchingEngine;

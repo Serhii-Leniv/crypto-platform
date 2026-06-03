@@ -1,6 +1,7 @@
 package org.serhiileniv.order.service;
 
 import org.junit.jupiter.api.Test;
+import org.serhiileniv.order.client.WalletClient;
 import org.serhiileniv.order.dto.OrderRequest;
 import org.serhiileniv.order.dto.OrderResponse;
 import org.serhiileniv.order.exception.OrderNotFoundException;
@@ -8,7 +9,9 @@ import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.model.OrderType;
+import org.serhiileniv.order.model.TradingPair;
 import org.serhiileniv.order.repository.OrderRepository;
+import org.serhiileniv.order.repository.TradingPairRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -36,30 +39,53 @@ class OrderServiceIntegrationTest {
     @SuppressWarnings("rawtypes")
     KafkaTemplate kafkaTemplate;
 
+    @MockBean
+    WalletClient walletClient;
+
     @Autowired
     OrderService orderService;
 
     @Autowired
     OrderRepository orderRepository;
 
+    @Autowired
+    TradingPairRepository tradingPairRepository;
+
     @org.junit.jupiter.api.BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
         org.mockito.Mockito.when(kafkaTemplate.send(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(null));
+        // Flyway is disabled in test profile — seed trading pairs directly.
+        seedTradingPair("BTC-USDT", "BTC", "USDT", "0.00001", "0.01");
+        seedTradingPair("ETH-USDT", "ETH", "USDT", "0.0001",  "0.01");
+    }
+
+    private void seedTradingPair(String symbol, String base, String quote, String minQty, String tickSize) {
+        if (tradingPairRepository.existsById(symbol)) return;
+        tradingPairRepository.save(TradingPair.builder()
+                .symbol(symbol)
+                .baseCurrency(base)
+                .quoteCurrency(quote)
+                .minQuantity(new BigDecimal(minQty))
+                .tickSize(new BigDecimal(tickSize))
+                .status("ACTIVE")
+                .makerFeeBps(10)
+                .takerFeeBps(20)
+                .build());
     }
 
     @Test
     void placeOrder_persistsToDatabase() {
         UUID userId = UUID.randomUUID();
         OrderRequest request = new OrderRequest(
-                "BTC/USDT", OrderType.LIMIT, OrderSide.BUY,
-                new BigDecimal("50000"), new BigDecimal("1"));
+                "BTC-USDT", OrderType.LIMIT, OrderSide.BUY,
+                new BigDecimal("50000"), new BigDecimal("1"), null, null);
 
         OrderResponse response = orderService.placeOrder(request, userId);
 
         assertNotNull(response.id());
-        assertEquals("BTC/USDT", response.symbol());
+        assertEquals("BTC-USDT", response.symbol());
         assertEquals(OrderStatus.PENDING, response.status());
 
         Order persisted = orderRepository.findById(response.id()).orElseThrow();
@@ -72,8 +98,8 @@ class OrderServiceIntegrationTest {
     void cancelOrder_changesStatusToCancelled() {
         UUID userId = UUID.randomUUID();
         OrderRequest request = new OrderRequest(
-                "ETH/USDT", OrderType.LIMIT, OrderSide.SELL,
-                new BigDecimal("3000"), new BigDecimal("2"));
+                "ETH-USDT", OrderType.LIMIT, OrderSide.SELL,
+                new BigDecimal("3000"), new BigDecimal("2"), null, null);
         OrderResponse placed = orderService.placeOrder(request, userId);
 
         orderService.cancelOrder(placed.id(), userId);
@@ -86,8 +112,9 @@ class OrderServiceIntegrationTest {
     void cancelOrder_filledOrder_throwsIllegalState() {
         UUID userId = UUID.randomUUID();
         Order filledOrder = Order.builder()
+                .id(UUID.randomUUID())
                 .userId(userId)
-                .symbol("BTC/USDT")
+                .symbol("BTC-USDT")
                 .orderType(OrderType.LIMIT)
                 .side(OrderSide.BUY)
                 .price(new BigDecimal("50000"))
@@ -105,8 +132,8 @@ class OrderServiceIntegrationTest {
         UUID ownerId = UUID.randomUUID();
         UUID otherUserId = UUID.randomUUID();
         OrderRequest request = new OrderRequest(
-                "BTC/USDT", OrderType.LIMIT, OrderSide.BUY,
-                new BigDecimal("50000"), new BigDecimal("0.5"));
+                "BTC-USDT", OrderType.LIMIT, OrderSide.BUY,
+                new BigDecimal("50000"), new BigDecimal("0.5"), null, null);
         OrderResponse placed = orderService.placeOrder(request, ownerId);
 
         assertThrows(OrderNotFoundException.class,
@@ -117,11 +144,11 @@ class OrderServiceIntegrationTest {
     void getUserOrders_returnsOrdersForUser() {
         UUID userId = UUID.randomUUID();
         orderService.placeOrder(new OrderRequest(
-                "BTC/USDT", OrderType.LIMIT, OrderSide.BUY,
-                new BigDecimal("50000"), new BigDecimal("1")), userId);
+                "BTC-USDT", OrderType.LIMIT, OrderSide.BUY,
+                new BigDecimal("50000"), new BigDecimal("1"), null, null), userId);
         orderService.placeOrder(new OrderRequest(
-                "ETH/USDT", OrderType.LIMIT, OrderSide.SELL,
-                new BigDecimal("3000"), new BigDecimal("5")), userId);
+                "ETH-USDT", OrderType.LIMIT, OrderSide.SELL,
+                new BigDecimal("3000"), new BigDecimal("5"), null, null), userId);
 
         var orders = orderService.getUserOrders(userId, PageRequest.of(0, 20));
 

@@ -41,7 +41,7 @@ public class AuthController {
             HttpServletResponse response) {
         LoginResult result = userService.register(request);
         setRefreshCookie(response, result.refreshToken());
-        return ResponseEntity.ok(new AuthResponse(result.accessToken()));
+        return ResponseEntity.ok(new AuthResponse(result.accessToken(), result.isAdmin()));
     }
 
     @PostMapping("/login")
@@ -56,7 +56,7 @@ public class AuthController {
             HttpServletResponse response) {
         LoginResult result = userService.login(request);
         setRefreshCookie(response, result.refreshToken());
-        return ResponseEntity.ok(new AuthResponse(result.accessToken()));
+        return ResponseEntity.ok(new AuthResponse(result.accessToken(), result.isAdmin()));
     }
 
     @PostMapping("/logout")
@@ -80,7 +80,7 @@ public class AuthController {
     })
     public ResponseEntity<AuthResponse> refreshToken(HttpServletRequest request) {
         LoginResult result = userService.refreshToken(request);
-        return ResponseEntity.ok(new AuthResponse(result.accessToken()));
+        return ResponseEntity.ok(new AuthResponse(result.accessToken(), result.isAdmin()));
     }
 
     private void setRefreshCookie(HttpServletResponse response, String refreshToken) {

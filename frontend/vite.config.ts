@@ -5,6 +5,10 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // sockjs-client references `global` (Node.js); browsers only have `window`.
+  define: {
+    global: 'globalThis',
+  },
   server: {
     port: 5173,
     proxy: {
