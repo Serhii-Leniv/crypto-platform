@@ -53,4 +53,3 @@ dump.rdb
 
 # Application
 application-local.properties
-application-dev.properties

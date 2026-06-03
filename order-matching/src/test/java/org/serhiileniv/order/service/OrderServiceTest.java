@@ -61,7 +61,7 @@ class OrderServiceTest {
         userId = UUID.randomUUID();
         orderId = UUID.randomUUID();
         orderRequest = new OrderRequest("BTC/USDT", OrderType.LIMIT, OrderSide.BUY, new BigDecimal("50000"),
-                new BigDecimal("1"));
+                new BigDecimal("1"), null, null);
         order = Order.builder()
                 .id(orderId)
                 .userId(userId)
@@ -171,7 +171,7 @@ class OrderServiceTest {
     @Test
     void placeOrder_MarketOrder_SkipsPriceValidation() {
         OrderRequest marketRequest = new OrderRequest(
-                "ETH-USDT", OrderType.MARKET, OrderSide.BUY, null, new BigDecimal("0.5"));
+                "ETH-USDT", OrderType.MARKET, OrderSide.BUY, null, new BigDecimal("0.5"), null, null);
         Order marketOrder = Order.builder()
                 .id(orderId).userId(userId).symbol("ETH-USDT")
                 .orderType(OrderType.MARKET).side(OrderSide.BUY)

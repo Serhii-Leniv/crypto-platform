@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 @Entity
 @Table(name = "processed_events", indexes = {
-        @Index(name = "idx_event_id", columnList = "event_id", unique = true)
+        @Index(name = "idx_event_id_type", columnList = "event_id, event_type", unique = true)
 })
 @Data
 @NoArgsConstructor
@@ -17,7 +17,7 @@ public class ProcessedEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private UUID eventId;
     @Column(nullable = false, length = 50)
     private String eventType;

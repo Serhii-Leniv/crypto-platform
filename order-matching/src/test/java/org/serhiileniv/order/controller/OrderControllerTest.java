@@ -54,13 +54,14 @@ class OrderControllerTest {
                 OrderType.LIMIT, OrderSide.BUY,
                 new BigDecimal("45000"), new BigDecimal("0.1"),
                 BigDecimal.ZERO, OrderStatus.PENDING,
+                org.serhiileniv.order.model.TimeInForce.GTC, null,
                 LocalDateTime.now(), LocalDateTime.now());
     }
 
     @Test
     void placeOrder_ValidRequest_Returns201() throws Exception {
         OrderRequest req = new OrderRequest("BTC-USDT", OrderType.LIMIT, OrderSide.BUY,
-                new BigDecimal("45000"), new BigDecimal("0.1"));
+                new BigDecimal("45000"), new BigDecimal("0.1"), null, null);
         when(orderService.placeOrder(any(), eq(USER_ID))).thenReturn(sampleResponse());
 
         mockMvc.perform(post("/api/v1/orders")

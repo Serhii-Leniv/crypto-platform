@@ -24,20 +24,20 @@ public class MarketData implements Serializable {
     private String symbol;
     @Column(nullable = false, precision = 20, scale = 8)
     private BigDecimal lastPrice;
-    @Column(nullable = false, precision = 20, scale = 8)
+    @Column(name = "volume_24h", nullable = false, precision = 20, scale = 8)
     @Builder.Default
     private BigDecimal volume24h = BigDecimal.ZERO;
-    @Column(nullable = false, precision = 20, scale = 8)
+    @Column(name = "high_24h", nullable = false, precision = 20, scale = 8)
     @Builder.Default
     private BigDecimal high24h = BigDecimal.ZERO;
-    @Column(nullable = false, precision = 20, scale = 8)
+    @Column(name = "low_24h", nullable = false, precision = 20, scale = 8)
     @Builder.Default
     private BigDecimal low24h = BigDecimal.ZERO;
-    @Column(precision = 20, scale = 8)
+    @Column(name = "price_change_24h", precision = 20, scale = 8)
     private BigDecimal priceChange24h;
-    @Column(precision = 10, scale = 2)
+    @Column(name = "price_change_percent_24h", precision = 10, scale = 2)
     private BigDecimal priceChangePercent24h;
-    @Column
+    @Column(name = "trade_count_24h")
     private Long tradeCount24h;
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -45,7 +45,7 @@ public class MarketData implements Serializable {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
-    @Column(precision = 20, scale = 8)
+    @Column(name = "open_price_24h", precision = 20, scale = 8)
     private BigDecimal openPrice24h;
 
     public void updateFromTrade(BigDecimal price, BigDecimal quantity) {

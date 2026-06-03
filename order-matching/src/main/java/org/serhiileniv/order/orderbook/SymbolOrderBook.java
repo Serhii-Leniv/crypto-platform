@@ -59,6 +59,54 @@ public class SymbolOrderBook {
         }
     }
 
+    /**
+     * Returns the best opposite price visible to an incoming order, or null if the side is empty.
+     * Used for POST_ONLY pre-checks (would this order cross the book?) and FOK feasibility scans.
+     */
+    public BigDecimal bestOppositePrice(OrderSide aggressorSide) {
+        lock.lock();
+        try {
+            TreeMap<BigDecimal, ArrayDeque<Order>> counter = aggressorSide == OrderSide.BUY ? asks : bids;
+            for (Map.Entry<BigDecimal, ArrayDeque<Order>> e : counter.entrySet()) {
+                for (Order o : e.getValue()) {
+                    if (o.getStatus() == OrderStatus.PENDING || o.getStatus() == OrderStatus.PARTIALLY_FILLED) {
+                        return e.getKey();
+                    }
+                }
+            }
+            return null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Returns the total remaining quantity an incoming order can take at acceptable prices,
+     * skipping the aggressor's own orders. Used for FOK feasibility checks before matching.
+     */
+    public BigDecimal availableCounterpartyQty(Order aggressor) {
+        lock.lock();
+        try {
+            TreeMap<BigDecimal, ArrayDeque<Order>> counter = aggressor.getSide() == OrderSide.BUY ? asks : bids;
+            BigDecimal sum = BigDecimal.ZERO;
+            for (Map.Entry<BigDecimal, ArrayDeque<Order>> e : counter.entrySet()) {
+                if (aggressor.getPrice() != null) {
+                    if (aggressor.getSide() == OrderSide.BUY  && e.getKey().compareTo(aggressor.getPrice()) > 0) break;
+                    if (aggressor.getSide() == OrderSide.SELL && e.getKey().compareTo(aggressor.getPrice()) < 0) break;
+                }
+                for (Order o : e.getValue()) {
+                    if (o.getStatus() != OrderStatus.PENDING && o.getStatus() != OrderStatus.PARTIALLY_FILLED) continue;
+                    if (o.getUserId().equals(aggressor.getUserId())) continue;  // STP — they can't match
+                    sum = sum.add(o.getRemainingQuantity());
+                    if (sum.compareTo(aggressor.getRemainingQuantity()) >= 0) return sum;
+                }
+            }
+            return sum;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /** Returns candidates for a match in price-time priority. Must be called with lock held. */
     public List<Order> matchableCandidates(Order aggressor) {
         TreeMap<BigDecimal, ArrayDeque<Order>> counter =

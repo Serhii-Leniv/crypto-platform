@@ -13,6 +13,7 @@
     "@stomp/stompjs": "^7.3.0",
     "@tanstack/react-query": "^5.100.2",
     "axios": "^1.15.2",
+    "lightweight-charts": "^5.2.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2",

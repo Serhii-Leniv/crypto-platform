@@ -24,7 +24,7 @@ import java.util.Arrays;
 @Slf4j
 public class UserService {
 
-    public record LoginResult(String accessToken, String refreshToken) {}
+    public record LoginResult(String accessToken, String refreshToken, boolean isAdmin) {}
 
     private final UserRepository userRepository;
     private final JwtService jwtService;
@@ -51,7 +51,7 @@ public class UserService {
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = jwtService.generateRefreshToken(user);
         refreshTokenRepository.save(new RefreshToken(refreshToken, user.getEmail()));
-        return new LoginResult(accessToken, refreshToken);
+        return new LoginResult(accessToken, refreshToken, user.isAdmin());
     }
 
     @Transactional
@@ -70,7 +70,7 @@ public class UserService {
         String refreshToken = jwtService.generateRefreshToken(user);
         refreshTokenRepository.save(new RefreshToken(refreshToken, user.getEmail()));
         log.info("Login successful: id={}, email={}", user.getId(), user.getEmail());
-        return new LoginResult(accessToken, refreshToken);
+        return new LoginResult(accessToken, refreshToken, user.isAdmin());
     }
 
     public LoginResult refreshToken(HttpServletRequest request) {
@@ -92,7 +92,7 @@ public class UserService {
             if (jwtService.isTokenValid(refreshToken, user)) {
                 String newAccess = jwtService.generateAccessToken(user);
                 log.info("Access token refreshed for email: {}", userEmail);
-                return new LoginResult(newAccess, refreshToken);
+                return new LoginResult(newAccess, refreshToken, user.isAdmin());
             }
         }
         log.warn("Token refresh failed — invalid token for email: {}", userEmail);

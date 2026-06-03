@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import {
   IconDashboard, IconOrderBook, IconTrade, IconOrders,
@@ -7,12 +7,13 @@ import {
 } from './icons';
 
 const links = [
-  { to: '/dashboard',    label: 'Market Data',   Icon: IconDashboard  },
-  { to: '/orderbook',    label: 'Order Book',    Icon: IconOrderBook  },
-  { to: '/place-order',  label: 'Place Order',   Icon: IconTrade      },
-  { to: '/my-orders',    label: 'My Orders',     Icon: IconOrders     },
-  { to: '/wallets',      label: 'Wallets',       Icon: IconWallet     },
-  { to: '/transactions', label: 'Transactions',  Icon: IconHistory    },
+  { to: '/',             label: 'Home',          Icon: IconDashboard, end: true,  admin: false },
+  { to: '/dashboard',    label: 'Markets',       Icon: IconOrderBook, end: false, admin: false },
+  { to: '/trade',        label: 'Trade',         Icon: IconTrade,     end: false, admin: false },
+  { to: '/my-orders',    label: 'My Orders',     Icon: IconOrders,    end: false, admin: false },
+  { to: '/wallets',      label: 'Portfolio',     Icon: IconWallet,    end: false, admin: false },
+  { to: '/transactions', label: 'Transactions',  Icon: IconHistory,   end: false, admin: false },
+  { to: '/admin',        label: 'Admin',         Icon: IconOrders,    end: false, admin: true  },
 ];
 
 function getUserEmail(): string {
@@ -26,45 +27,39 @@ function getUserEmail(): string {
 }
 
 export default function Layout() {
-  const { logout } = useAuth();
+  const { logout, isAdmin } = useAuth();
   const [open, setOpen] = useState(false);
   const userEmail = getUserEmail();
+  const visibleLinks = links.filter((l) => !l.admin || isAdmin);
 
   return (
-    <div className="flex min-h-screen" style={{ background: '#1e2026' }}>
-      {/* Mobile overlay */}
+    <div className="flex min-h-screen" style={{ background: '#0a0e14' }}>
       {open && (
         <div
           className="fixed inset-0 z-20 md:hidden"
-          style={{ background: 'rgba(0,0,0,0.6)' }}
+          style={{ background: 'rgba(0,0,0,0.7)' }}
           onClick={() => setOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-30 w-60 flex-shrink-0 flex flex-col transition-transform duration-200 md:translate-x-0 ${
+        className={`fixed md:static inset-y-0 left-0 z-30 w-56 flex-shrink-0 flex flex-col transition-transform duration-150 md:translate-x-0 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
-        style={{ background: '#252930', borderRight: '1px solid #3c4049' }}
+        style={{ background: '#11161d', borderRight: '1px solid #2a3441' }}
       >
-        {/* Logo */}
-        <div
-          className="flex items-center gap-3 px-5 py-5"
-          style={{ borderBottom: '1px solid #3c4049' }}
-        >
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, #f0b90b, #d4a309)' }}
+        <div className="flex items-center px-5 h-14" style={{ borderBottom: '1px solid #2a3441' }}>
+          <Link
+            to="/"
+            onClick={() => setOpen(false)}
+            className="text-base font-semibold"
+            style={{ color: '#f5f6f8', textDecoration: 'none' }}
           >
-            <span className="text-xs font-black leading-none" style={{ color: '#1e2026' }}>CE</span>
-          </div>
-          <span className="text-base font-bold tracking-wide" style={{ color: '#f0b90b' }}>
-            CryptoEx
-          </span>
+            Kairos <span style={{ color: '#6c7684', fontWeight: 400 }}>Capital</span>
+          </Link>
           <button
-            className="md:hidden ml-auto p-1 rounded-lg transition-colors"
-            style={{ color: '#9ca3af' }}
+            className="md:hidden ml-auto p-1"
+            style={{ color: '#a0a8b4' }}
             onClick={() => setOpen(false)}
             aria-label="Close menu"
           >
@@ -72,28 +67,22 @@ export default function Layout() {
           </button>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {links.map(({ to, label, Icon }) => (
+        <nav className="flex-1 px-2 py-3 space-y-px overflow-y-auto">
+          {visibleLinks.map(({ to, label, Icon, end }) => (
             <NavLink
               key={to}
               to={to}
+              end={end}
               onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-                  isActive
-                    ? 'text-yellow-400'
-                    : 'text-gray-400 hover:text-gray-100'
-                }`
-              }
+              className="flex items-center gap-3 px-3 py-2 text-sm transition-colors duration-100"
               style={({ isActive }) => isActive
-                ? { background: 'rgba(240,185,11,0.08)', boxShadow: 'inset 3px 0 0 #f0b90b' }
-                : { background: 'transparent' }
+                ? { background: 'rgba(0, 104, 255, 0.1)', color: '#0068ff', boxShadow: 'inset 2px 0 0 #0068ff' }
+                : { background: 'transparent', color: '#a0a8b4' }
               }
             >
               {({ isActive }) => (
                 <>
-                  <Icon size={16} style={{ flexShrink: 0, color: isActive ? '#f0b90b' : 'currentColor' }} />
+                  <Icon size={15} style={{ flexShrink: 0, color: isActive ? '#0068ff' : '#6c7684' }} />
                   {label}
                 </>
               )}
@@ -101,59 +90,47 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* User + Logout */}
-        <div className="px-3 pb-4 pt-3" style={{ borderTop: '1px solid #3c4049' }}>
+        <div className="px-3 pb-3 pt-3" style={{ borderTop: '1px solid #2a3441' }}>
           {userEmail && (
-            <div className="px-3 py-2 mb-1">
-              <p className="text-xs truncate" style={{ color: '#6b7280' }}>{userEmail}</p>
-            </div>
+            <p className="text-xs truncate mb-2 mono" style={{ color: '#6c7684' }}>{userEmail}</p>
           )}
           <button
             onClick={logout}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
-            style={{ color: '#9ca3af' }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLButtonElement).style.color = '#f6465d';
-              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(246,70,93,0.08)';
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.color = '#9ca3af';
-              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-            }}
+            className="flex items-center gap-2.5 w-full px-1 py-1 text-sm transition-colors duration-100"
+            style={{ color: '#a0a8b4' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ff4d5e'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a0a8b4'; }}
           >
-            <IconLogout size={16} style={{ flexShrink: 0 }} />
-            Sign Out
+            <IconLogout size={14} style={{ flexShrink: 0 }} />
+            Sign out
           </button>
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto min-w-0">
-        {/* Mobile top bar */}
+      <main className="flex-1 overflow-auto min-w-0 flex flex-col">
         <div
-          className="md:hidden flex items-center px-4 py-3 sticky top-0 z-10"
-          style={{ background: '#252930', borderBottom: '1px solid #3c4049' }}
+          className="md:hidden flex items-center px-4 h-12 sticky top-0 z-10"
+          style={{ background: '#11161d', borderBottom: '1px solid #2a3441' }}
         >
           <button
             onClick={() => setOpen(true)}
-            className="p-1.5 rounded-lg transition-colors"
-            style={{ color: '#9ca3af' }}
+            className="p-1.5"
+            style={{ color: '#a0a8b4' }}
             aria-label="Open menu"
           >
             <IconMenu size={20} />
           </button>
-          <div className="flex items-center gap-2 ml-3">
-            <div
-              className="w-6 h-6 rounded flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #f0b90b, #d4a309)' }}
-            >
-              <span className="text-xs font-black leading-none" style={{ color: '#1e2026', fontSize: '9px' }}>CE</span>
-            </div>
-            <span className="font-bold text-sm" style={{ color: '#f0b90b' }}>CryptoEx</span>
-          </div>
+          <Link
+            to="/"
+            onClick={() => setOpen(false)}
+            className="text-base font-semibold ml-3"
+            style={{ color: '#f5f6f8', textDecoration: 'none' }}
+          >
+            Kairos <span style={{ color: '#6c7684', fontWeight: 400 }}>Capital</span>
+          </Link>
         </div>
 
-        <div className="p-4 md:p-6">
+        <div className="p-4 md:p-6 flex-1">
           <Outlet />
         </div>
       </main>

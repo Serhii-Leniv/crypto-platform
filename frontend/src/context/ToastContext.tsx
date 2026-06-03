@@ -8,9 +8,9 @@ interface ToastCtx { toast: (message: string, type?: ToastType) => void; }
 const ToastContext = createContext<ToastCtx>({ toast: () => {} });
 
 const ACCENT: Record<ToastType, string> = {
-  success: '#0ecb81',
-  error:   '#f6465d',
-  info:    '#f0b90b',
+  success: '#00d09c',
+  error:   '#ff4d5e',
+  info:    '#0068ff',
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -39,12 +39,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             style={{
-              background: '#252930',
+              background: '#11161d',
               borderLeft: `3px solid ${ACCENT[t.type]}`,
-              borderRight: '1px solid #3c4049',
-              borderTop: '1px solid #3c4049',
-              borderBottom: '1px solid #3c4049',
-              color: '#e2e8f0',
+              borderRight: '1px solid #2a3441',
+              borderTop: '1px solid #2a3441',
+              borderBottom: '1px solid #2a3441',
+              color: '#f5f6f8',
               padding: '11px 12px 11px 14px',
               borderRadius: 8,
               fontSize: 13,
@@ -70,7 +70,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               aria-label="Dismiss"
               style={{
                 background: 'none', border: 'none', padding: '1px 0 0 4px',
-                cursor: 'pointer', color: '#6b7280', flexShrink: 0,
+                cursor: 'pointer', color: '#6c7684', flexShrink: 0,
                 display: 'flex', alignItems: 'center', lineHeight: 1,
               }}
             >

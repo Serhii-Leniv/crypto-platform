@@ -30,6 +30,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
         List<Order> findByStatusIn(List<OrderStatus> statuses);
 
+        List<Order> findByStatusAndOrderType(OrderStatus status,
+                        org.serhiileniv.order.model.OrderType orderType);
+
         Page<Order> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
         @Lock(LockModeType.PESSIMISTIC_WRITE)

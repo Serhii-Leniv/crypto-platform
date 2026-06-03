@@ -54,7 +54,7 @@ class OrderServiceIntegrationTest {
         UUID userId = UUID.randomUUID();
         OrderRequest request = new OrderRequest(
                 "BTC/USDT", OrderType.LIMIT, OrderSide.BUY,
-                new BigDecimal("50000"), new BigDecimal("1"));
+                new BigDecimal("50000"), new BigDecimal("1"), null, null);
 
         OrderResponse response = orderService.placeOrder(request, userId);
 
@@ -73,7 +73,7 @@ class OrderServiceIntegrationTest {
         UUID userId = UUID.randomUUID();
         OrderRequest request = new OrderRequest(
                 "ETH/USDT", OrderType.LIMIT, OrderSide.SELL,
-                new BigDecimal("3000"), new BigDecimal("2"));
+                new BigDecimal("3000"), new BigDecimal("2"), null, null);
         OrderResponse placed = orderService.placeOrder(request, userId);
 
         orderService.cancelOrder(placed.id(), userId);
@@ -106,7 +106,7 @@ class OrderServiceIntegrationTest {
         UUID otherUserId = UUID.randomUUID();
         OrderRequest request = new OrderRequest(
                 "BTC/USDT", OrderType.LIMIT, OrderSide.BUY,
-                new BigDecimal("50000"), new BigDecimal("0.5"));
+                new BigDecimal("50000"), new BigDecimal("0.5"), null, null);
         OrderResponse placed = orderService.placeOrder(request, ownerId);
 
         assertThrows(OrderNotFoundException.class,
@@ -118,10 +118,10 @@ class OrderServiceIntegrationTest {
         UUID userId = UUID.randomUUID();
         orderService.placeOrder(new OrderRequest(
                 "BTC/USDT", OrderType.LIMIT, OrderSide.BUY,
-                new BigDecimal("50000"), new BigDecimal("1")), userId);
+                new BigDecimal("50000"), new BigDecimal("1"), null, null), userId);
         orderService.placeOrder(new OrderRequest(
                 "ETH/USDT", OrderType.LIMIT, OrderSide.SELL,
-                new BigDecimal("3000"), new BigDecimal("5")), userId);
+                new BigDecimal("3000"), new BigDecimal("5"), null, null), userId);
 
         var orders = orderService.getUserOrders(userId, PageRequest.of(0, 20));
 

@@ -2,13 +2,16 @@ package org.serhiileniv.order.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.serhiileniv.order.client.WalletClient;
 import org.serhiileniv.order.kafka.event.OrderMatchedEvent;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
+import org.serhiileniv.order.model.TradingPair;
 import org.serhiileniv.order.orderbook.OrderBookManager;
 import org.serhiileniv.order.orderbook.SymbolOrderBook;
 import org.serhiileniv.order.repository.OrderRepository;
+import org.serhiileniv.order.repository.TradingPairRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +30,8 @@ public class OrderMatchingEngine {
     private final OrderRepository orderRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final OrderBookManager orderBookManager;
+    private final WalletClient walletClient;
+    private final TradingPairRepository tradingPairRepository;
 
     @Transactional
     public List<OrderMatchedEvent> matchOrder(Order newOrder) {
@@ -42,9 +47,37 @@ public class OrderMatchingEngine {
                         && counterparty.getStatus() != OrderStatus.PARTIALLY_FILLED) {
                     continue;
                 }
+                // Self-trade prevention: never match a user against themselves
+                if (newOrder.getUserId().equals(counterparty.getUserId())) {
+                    log.info("STP: skipping self-match between {} and {}", newOrder.getId(), counterparty.getId());
+                    continue;
+                }
                 if (!canMatch(newOrder, counterparty)) break;
 
                 OrderMatchedEvent event = executeMatch(newOrder, counterparty);
+
+                // Fee determination: counterparty was sitting in the book → it's the MAKER.
+                // The incoming newOrder is the TAKER (it removed liquidity).
+                TradingPair pair = tradingPairRepository.findById(event.getSymbol()).orElse(null);
+                int makerFeeBps = pair != null ? pair.getMakerFeeBps() : 10;
+                int takerFeeBps = pair != null ? pair.getTakerFeeBps() : 20;
+                boolean buyerIsMaker = counterparty.getSide() == OrderSide.BUY;  // counterparty == maker
+
+                // Atomic 4-wallet settlement BEFORE persisting the match. If settle throws,
+                // the @Transactional method rolls back the in-memory fill() updates we just made
+                // by re-throwing — the caller (OrderService) sees the failure synchronously.
+                walletClient.settle(new WalletClient.SettleRequest(
+                        event.getBuyerUserId(), event.getSellerUserId(),
+                        baseOf(event.getSymbol()), quoteOf(event.getSymbol()),
+                        event.getQuantity(),
+                        event.getPrice().multiply(event.getQuantity()),
+                        event.getPrice(),
+                        event.getBuyerLimitPrice(),
+                        event.getTradeId(),
+                        event.getSymbol(),
+                        buyerIsMaker ? makerFeeBps : takerFeeBps,
+                        buyerIsMaker ? takerFeeBps : makerFeeBps));
+
                 matchedEvents.add(event);
                 orderRepository.save(counterparty);
                 orderRepository.save(newOrder);
@@ -59,6 +92,9 @@ public class OrderMatchingEngine {
         log.info("Matching done for order {}. Filled: {}/{}", newOrder.getId(), newOrder.getFilledQuantity(), newOrder.getQuantity());
         return matchedEvents;
     }
+
+    private static String baseOf(String symbol)  { return symbol.split("[/-]")[0]; }
+    private static String quoteOf(String symbol) { return symbol.split("[/-]")[1]; }
 
     /** Builds the order book view from the in-memory book (no DB query). */
     public OrderBook getOrderBook(String symbol) {

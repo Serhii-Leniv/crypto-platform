@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { IconTrade } from '../components/icons';
 
 export default function LoginPage() {
   const [tab, setTab] = useState<'login' | 'register'>('login');
@@ -26,7 +25,7 @@ export default function LoginPage() {
       navigate('/dashboard');
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } }; message?: string };
-      const msg = e?.response?.data?.message ?? e?.message ?? 'Something went wrong';
+      const msg = e?.response?.data?.message ?? e?.message ?? 'Authentication failed';
       setError(msg);
     } finally {
       setLoading(false);
@@ -35,117 +34,95 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center relative overflow-hidden"
-      style={{ background: '#1e2026' }}
+      className="min-h-screen flex items-center justify-center px-6"
+      style={{ background: '#0a0e14' }}
     >
-      {/* Dot grid background */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: 'radial-gradient(circle, #3c4049 1px, transparent 1px)',
-          backgroundSize: '28px 28px',
-          opacity: 0.5,
-        }}
-      />
-      {/* Radial vignette */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse 70% 60% at 50% 50%, transparent 30%, #1e2026 100%)',
-        }}
-      />
-
-      {/* Card */}
-      <div
-        className="relative w-full max-w-sm rounded-2xl px-8 py-10"
-        style={{ background: '#252930', border: '1px solid #3c4049' }}
-      >
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4"
-            style={{ background: 'linear-gradient(135deg, #f0b90b, #d4a309)' }}
-          >
-            <IconTrade size={22} style={{ color: '#1e2026' }} />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#e2e8f0' }}>
-            CryptoEx
-          </h1>
-          <p className="text-sm mt-1" style={{ color: '#6b7280' }}>
-            Professional Trading Platform
-          </p>
+      <div className="w-full max-w-sm">
+        <div className="mb-10">
+          <span className="text-lg font-semibold" style={{ color: '#f5f6f8' }}>Kairos Capital</span>
         </div>
 
-        {/* Tabs — underline style */}
-        <div className="flex mb-7" style={{ borderBottom: '1px solid #3c4049' }}>
+        <div className="flex mb-6" style={{ borderBottom: '1px solid #2a3441' }}>
           {(['login', 'register'] as const).map((t) => (
             <button
               key={t}
               onClick={() => { setTab(t); setError(''); }}
-              className="flex-1 pb-3 text-sm font-medium relative transition-colors"
-              style={{ color: tab === t ? '#f0b90b' : '#6b7280' }}
+              className="pb-3 mr-6 text-sm relative transition-colors"
+              style={{ color: tab === t ? '#f5f6f8' : '#6c7684' }}
             >
-              {t === 'login' ? 'Sign In' : 'Create Account'}
+              {t === 'login' ? 'Sign in' : 'Register'}
               {tab === t && (
-                <span
-                  className="absolute bottom-0 left-0 right-0 rounded-t"
-                  style={{ height: 2, background: '#f0b90b' }}
-                />
+                <span className="absolute bottom-0 left-0 right-0" style={{ height: 2, background: '#0068ff' }} />
               )}
             </button>
           ))}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: '#9ca3af' }}>
-              Email address
-            </label>
+            <label className="block text-xs mb-1.5" style={{ color: '#a0a8b4' }}>Email</label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="input-field w-full px-3 py-2.5 rounded-lg text-sm text-gray-100"
-              style={{ background: '#1e2026', border: '1px solid #3c4049' }}
+              className="input-field mono w-full px-3 py-2 text-sm"
+              style={{ background: '#11161d', border: '1px solid #2a3441', color: '#f5f6f8' }}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: '#9ca3af' }}>
-              Password
-            </label>
+            <label className="block text-xs mb-1.5" style={{ color: '#a0a8b4' }}>Password</label>
             <input
               type="password"
               required
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="input-field w-full px-3 py-2.5 rounded-lg text-sm text-gray-100"
-              style={{ background: '#1e2026', border: '1px solid #3c4049' }}
+              className="input-field mono w-full px-3 py-2 text-sm"
+              style={{ background: '#11161d', border: '1px solid #2a3441', color: '#f5f6f8' }}
             />
           </div>
 
           {error && (
             <div
-              className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-sm"
-              style={{ background: 'rgba(246,70,93,0.08)', border: '1px solid rgba(246,70,93,0.2)', color: '#f6465d' }}
+              className="px-3 py-2 text-xs"
+              style={{ background: 'rgba(255,77,94,0.08)', border: '1px solid rgba(255,77,94,0.25)', color: '#ff4d5e' }}
             >
-              <span className="font-bold mt-px leading-none">!</span>
-              <span>{error}</span>
+              {error}
             </div>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 rounded-xl font-semibold text-sm transition-opacity disabled:opacity-50 mt-1"
-            style={{ background: '#f0b90b', color: '#1e2026' }}
+            className="w-full py-2.5 text-sm font-medium transition-opacity disabled:opacity-50"
+            style={{ background: '#0068ff', color: '#fff' }}
           >
-            {loading ? 'Please wait…' : tab === 'login' ? 'Sign In' : 'Create Account'}
+            {loading ? 'Signing in…' : tab === 'login' ? 'Sign in' : 'Create account'}
           </button>
         </form>
+
+        <p className="text-xs mt-8" style={{ color: '#6c7684' }}>
+          Demo: <span
+            className="mono cursor-pointer"
+            style={{ color: '#a0a8b4' }}
+            onClick={() => { setEmail('alice@demo.io'); setPassword('Password1'); setTab('login'); }}
+          >alice@demo.io</span>
+          {' / '}
+          <span
+            className="mono cursor-pointer"
+            style={{ color: '#a0a8b4' }}
+            onClick={() => { setEmail('bob@demo.io'); setPassword('Password1'); setTab('login'); }}
+          >bob@demo.io</span>
+          {' / '}
+          <span
+            className="mono cursor-pointer"
+            style={{ color: '#a0a8b4' }}
+            onClick={() => { setEmail('charlie@demo.io'); setPassword('Password1'); setTab('login'); }}
+          >charlie@demo.io</span>
+          {' — password '}
+          <span className="mono" style={{ color: '#a0a8b4' }}>Password1</span>
+        </p>
       </div>
     </div>
   );

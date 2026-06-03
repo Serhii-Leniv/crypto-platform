@@ -3,6 +3,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.domain.Persistable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -16,10 +17,29 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Order {
+public class Order implements Persistable<UUID> {
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    /**
+     * OrderService now pre-generates the order ID so it can be passed to wallet-service for the
+     * synchronous fund lock before the row is persisted. With a non-null @Id, Spring Data's
+     * default save() would treat the entity as detached and try MERGE (failing because the row
+     * doesn't exist yet). Implementing Persistable lets us tell Spring it's new until the first
+     * load/persist sets isNew=false, which routes save() through INSERT.
+     */
+    @Transient
+    @Builder.Default
+    private boolean isNew = true;
+
+    @Override
+    public UUID getId() { return id; }
+
+    @Override
+    public boolean isNew() { return isNew; }
+
+    @PostPersist @PostLoad
+    void markPersisted() { this.isNew = false; }
     @Column(nullable = false)
     private UUID userId;
     @Column(nullable = false, length = 20)
@@ -41,6 +61,13 @@ public class Order {
     @Column(nullable = false, length = 20)
     @Builder.Default
     private OrderStatus status = OrderStatus.PENDING;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "time_in_force", nullable = false, length = 10)
+    @Builder.Default
+    private TimeInForce timeInForce = TimeInForce.GTC;
+    /** Activation level for STOP_LIMIT orders; null for plain LIMIT/MARKET. */
+    @Column(name = "trigger_price", precision = 20, scale = 8)
+    private BigDecimal triggerPrice;
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

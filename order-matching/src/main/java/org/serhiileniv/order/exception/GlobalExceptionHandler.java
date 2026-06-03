@@ -34,6 +34,39 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(InsufficientFundsException.class)
+    public ProblemDetail handleInsufficientFunds(InsufficientFundsException ex) {
+        log.warn("Insufficient funds — {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setType(VALIDATION_ERROR_TYPE);
+        problem.setTitle("Insufficient Funds");
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler({
+            org.serhiileniv.order.service.OrderService.PostOnlyRejectedException.class,
+            org.serhiileniv.order.service.OrderService.FokRejectedException.class
+    })
+    public ProblemDetail handleTifRejected(RuntimeException ex) {
+        log.warn("TIF rejected — {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setType(VALIDATION_ERROR_TYPE);
+        problem.setTitle("Order Rejected");
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidSymbolException.class)
+    public ProblemDetail handleInvalidSymbol(InvalidSymbolException ex) {
+        log.warn("Invalid symbol rejected — {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setType(VALIDATION_ERROR_TYPE);
+        problem.setTitle("Invalid Symbol");
+        problem.setProperty("timestamp", Instant.now());
+        return problem;
+    }
+
     @ExceptionHandler(UnauthorizedOrderAccessException.class)
     public ProblemDetail handleUnauthorizedAccess(UnauthorizedOrderAccessException ex) {
         log.warn("Unauthorized order access — {}", ex.getMessage());
