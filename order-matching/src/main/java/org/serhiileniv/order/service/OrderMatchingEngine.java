@@ -1,8 +1,10 @@
 package org.serhiileniv.order.service;
 
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.serhiileniv.order.client.WalletClient;
+import org.serhiileniv.order.config.TradingMetrics;
 import org.serhiileniv.order.kafka.event.OrderMatchedEvent;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
@@ -32,9 +34,19 @@ public class OrderMatchingEngine {
     private final OrderBookManager orderBookManager;
     private final WalletClient walletClient;
     private final TradingPairRepository tradingPairRepository;
+    private final TradingMetrics metrics;
 
     @Transactional
     public List<OrderMatchedEvent> matchOrder(Order newOrder) {
+        Timer.Sample matchTimer = metrics.startMatchTimer();
+        try {
+            return doMatchOrder(newOrder);
+        } finally {
+            metrics.stopMatchTimer(matchTimer);
+        }
+    }
+
+    private List<OrderMatchedEvent> doMatchOrder(Order newOrder) {
         log.info("Starting matching for order: {}", newOrder.getId());
         List<OrderMatchedEvent> matchedEvents = new ArrayList<>();
         SymbolOrderBook book = orderBookManager.getOrCreate(newOrder.getSymbol());
@@ -50,6 +62,7 @@ public class OrderMatchingEngine {
                 // Self-trade prevention: never match a user against themselves
                 if (newOrder.getUserId().equals(counterparty.getUserId())) {
                     log.info("STP: skipping self-match between {} and {}", newOrder.getId(), counterparty.getId());
+                    metrics.recordSelfTradeSkip();
                     continue;
                 }
                 if (!canMatch(newOrder, counterparty)) break;
@@ -83,6 +96,7 @@ public class OrderMatchingEngine {
                 orderRepository.save(newOrder);
                 if (counterparty.isFullyFilled()) book.remove(counterparty);
                 applicationEventPublisher.publishEvent(event);
+                metrics.recordFill(event.getSymbol(), event.getQuantity());
                 log.info("Matched {} units @ {} for trade {}", event.getQuantity(), event.getPrice(), event.getTradeId());
             }
             if (newOrder.isFullyFilled()) book.remove(newOrder);

@@ -200,9 +200,11 @@ Funds were already locked at placement, so activation is purely a state transiti
 | 2 | buyer | quote | `locked   −= quoteAmount` | release the part of the lock that's being spent |
 | 3 | seller | base | `locked   −= baseAmount` | release the part of the lock that's being delivered |
 | 4 | seller | quote | `available += quoteAmount − sellerFee` | maker or taker fee per the seller's role |
-| 5 | buyer | quote | `available += (buyerLimitPrice − execPrice) × qty` | slippage refund (only when matched below the limit) |
+| 5 | **house** | base | `available += buyerFee` | fee revenue from buyer ([ADR-0008](decisions/0008-fees-credited-to-house-wallet.md)) |
+| 6 | **house** | quote | `available += sellerFee` | fee revenue from seller |
+| 7 | buyer | quote | `available += (buyerLimitPrice − execPrice) × qty` | slippage refund (only when matched below the limit) |
 
-All five movements share one transaction. A failure at any step rolls back all of them and the matching engine's outer transaction rolls back the in-memory fill it just applied (re-thrown exception).
+All movements share one transaction. A failure at any step rolls back all of them and the matching engine's outer transaction rolls back the in-memory fill it just applied (re-thrown exception). Conservation invariant: per trade `Σ deposits = Σ debits` (fees are no longer lost — they go to the house user `00000000-0000-0000-0000-00000000feee`).
 
 Idempotency: `processed_events` has a composite unique index on `(event_id, event_type)` so the same `tradeId` for `ORDER_MATCHED` is safe to retry but does not block a later `ORDER_CANCELLED` for the same `orderId`.
 

@@ -1,7 +1,9 @@
 package org.serhiileniv.wallet.service;
 
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.serhiileniv.wallet.config.WalletMetrics;
 import org.serhiileniv.wallet.exception.WalletNotFoundException;
 import org.serhiileniv.wallet.model.*;
 import org.serhiileniv.wallet.repository.TransactionRepository;
@@ -18,8 +20,15 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 public class WalletService {
+    /**
+     * Synthetic house account that accumulates maker/taker fees.
+     * Wallets for this user are auto-created on first settle ([ADR-0008]).
+     */
+    public static final UUID HOUSE_USER_ID = UUID.fromString("00000000-0000-0000-0000-00000000feee");
+
     private final WalletRepository walletRepository;
     private final TransactionRepository transactionRepository;
+    private final WalletMetrics metrics;
 
     @Transactional
     public void deposit(UUID userId, String currency, BigDecimal amount) {
@@ -161,6 +170,22 @@ public class WalletService {
             BigDecimal executionPrice, BigDecimal buyerLimitPrice,
             UUID tradeId, String symbol,
             int buyerFeeBps, int sellerFeeBps) {
+        Timer.Sample settleTimer = metrics.startSettleTimer();
+        try {
+            doSettleTrade(buyerId, sellerId, baseCurrency, quoteCurrency, baseAmount, quoteAmount,
+                    executionPrice, buyerLimitPrice, tradeId, symbol, buyerFeeBps, sellerFeeBps);
+        } finally {
+            metrics.stopSettleTimer(settleTimer);
+        }
+    }
+
+    private void doSettleTrade(
+            UUID buyerId, UUID sellerId,
+            String baseCurrency, String quoteCurrency,
+            BigDecimal baseAmount, BigDecimal quoteAmount,
+            BigDecimal executionPrice, BigDecimal buyerLimitPrice,
+            UUID tradeId, String symbol,
+            int buyerFeeBps, int sellerFeeBps) {
         if (buyerId.equals(sellerId)) {
             throw new IllegalArgumentException("Self-trade not allowed");
         }
@@ -212,6 +237,26 @@ public class WalletService {
         transactionRepository.save(buildTxn(buyerQuote.getId(),  TransactionType.TRADE_SELL, quoteAmount, quoteCurrency, tradeId, buyerQuoteDesc));
         transactionRepository.save(buildTxn(sellerBase.getId(),  TransactionType.TRADE_SELL, baseAmount,  baseCurrency,  tradeId, sellerBaseDesc));
         transactionRepository.save(buildTxn(sellerQuote.getId(), TransactionType.TRADE_BUY,  sellerNet,   quoteCurrency, tradeId, sellerQuoteDesc));
+
+        // Fees → house wallet. Previously the fee amounts were deducted from buyer/seller credits
+        // but never credited anywhere; they evaporated. ADR-0008 routes them into a synthetic
+        // HOUSE_USER_ID wallet per currency, accumulating exchange revenue.
+        if (buyerFee.signum() > 0) {
+            Wallet houseBase = getOrCreateWalletLocked(HOUSE_USER_ID, baseCurrency);
+            houseBase.deposit(buyerFee);
+            walletRepository.save(houseBase);
+            transactionRepository.save(buildTxn(houseBase.getId(), TransactionType.TRADE_BUY, buyerFee, baseCurrency, tradeId,
+                    String.format("%s fee from buyer trade %s — %s %s", symbol, tradeId, trimZeros(buyerFee), baseCurrency)));
+            metrics.recordFeeCollected(baseCurrency, buyerFee);
+        }
+        if (sellerFee.signum() > 0) {
+            Wallet houseQuote = getOrCreateWalletLocked(HOUSE_USER_ID, quoteCurrency);
+            houseQuote.deposit(sellerFee);
+            walletRepository.save(houseQuote);
+            transactionRepository.save(buildTxn(houseQuote.getId(), TransactionType.TRADE_BUY, sellerFee, quoteCurrency, tradeId,
+                    String.format("%s fee from seller trade %s — %s %s", symbol, tradeId, trimZeros(sellerFee), quoteCurrency)));
+            metrics.recordFeeCollected(quoteCurrency, sellerFee);
+        }
 
         // Slippage refund: if buyer's limit price was higher than execution price, return the diff
         if (buyerLimitPrice != null && buyerLimitPrice.compareTo(executionPrice) > 0) {

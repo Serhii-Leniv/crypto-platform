@@ -1,8 +1,10 @@
 package org.serhiileniv.order.service;
 
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.serhiileniv.order.client.WalletClient;
+import org.serhiileniv.order.config.TradingMetrics;
 import org.serhiileniv.order.dto.OrderRequest;
 import org.serhiileniv.order.dto.OrderResponse;
 import org.serhiileniv.order.exception.InvalidSymbolException;
@@ -43,12 +45,27 @@ public class OrderService {
         private final OrderBookManager orderBookManager;
         private final TradingPairRepository tradingPairRepository;
         private final WalletClient walletClient;
+        private final TradingMetrics metrics;
 
         @PersistenceContext
         private EntityManager entityManager;
 
         @Transactional
         public OrderResponse placeOrder(OrderRequest request, UUID userId) {
+                Timer.Sample timer = metrics.startPlacementTimer();
+                String outcome = "success";
+                try {
+                        return doPlaceOrder(request, userId);
+                } catch (PostOnlyRejectedException e)   { outcome = "post_only_rejected"; metrics.recordOrderRejected(outcome); throw e; }
+                catch (FokRejectedException e)          { outcome = "fok_rejected";       metrics.recordOrderRejected(outcome); throw e; }
+                catch (InvalidSymbolException e)        { outcome = "invalid_symbol";     metrics.recordOrderRejected(outcome); throw e; }
+                catch (RuntimeException e)              { outcome = e.getClass().getSimpleName(); metrics.recordOrderRejected("error"); throw e; }
+                finally {
+                        metrics.stopPlacementTimer(timer, outcome);
+                }
+        }
+
+        private OrderResponse doPlaceOrder(OrderRequest request, UUID userId) {
                 log.info("Placing order for user {}: {} {} {} @ {} (TIF={}, type={})",
                                 userId, request.side(), request.quantity(), request.symbol(), request.price(),
                                 request.effectiveTimeInForce(), request.orderType());
@@ -81,6 +98,7 @@ public class OrderService {
                 if (request.orderType() == OrderType.STOP_LIMIT) {
                         order = orderRepository.save(order);
                         log.info("Stop-limit parked: {} trigger={} limit={}", order.getId(), order.getTriggerPrice(), order.getPrice());
+                        metrics.recordOrderPlaced(request.symbol(), request.side(), request.orderType(), tif);
                         return OrderResponse.fromEntity(order);
                 }
 
@@ -134,6 +152,7 @@ public class OrderService {
                         }
                 }
 
+                metrics.recordOrderPlaced(request.symbol(), request.side(), request.orderType(), tif);
                 log.info("Order placed successfully: {} with status: {}", order.getId(), order.getStatus());
                 return OrderResponse.fromEntity(order);
         }

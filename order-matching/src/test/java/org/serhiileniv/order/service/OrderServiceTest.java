@@ -7,6 +7,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.serhiileniv.order.client.WalletClient;
+import org.serhiileniv.order.config.TradingMetrics;
 import org.serhiileniv.order.dto.OrderRequest;
 import org.serhiileniv.order.dto.OrderResponse;
 import org.serhiileniv.order.exception.OrderNotFoundException;
@@ -54,6 +55,8 @@ class OrderServiceTest {
     private TradingPairRepository tradingPairRepository;
     @Mock
     private WalletClient walletClient;
+    @Mock
+    private TradingMetrics metrics;
 
     @InjectMocks
     private OrderService orderService;

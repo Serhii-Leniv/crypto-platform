@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.serhiileniv.wallet.config.WalletMetrics;
 import org.serhiileniv.wallet.exception.InsufficientFundsException;
 import org.serhiileniv.wallet.model.Wallet;
 import org.serhiileniv.wallet.repository.TransactionRepository;
@@ -27,6 +28,8 @@ class WalletServiceTest {
     private WalletRepository walletRepository;
     @Mock
     private TransactionRepository transactionRepository;
+    @Mock
+    private WalletMetrics metrics;
 
     @InjectMocks
     private WalletService walletService;

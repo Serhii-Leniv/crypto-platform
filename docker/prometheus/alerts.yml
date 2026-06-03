@@ -1,0 +1,42 @@
+groups:
+  - name: trading-engine
+    interval: 30s
+    rules:
+      # Settlement is the synchronous correctness-critical path. A p99 above 200ms
+      # for several minutes suggests wallet-service contention or DB lock pressure.
+      - alert: SettleLatencyP99High
+        expr: histogram_quantile(0.99, sum(rate(wallet_settle_duration_seconds_bucket[5m])) by (le)) > 0.2
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "wallet-service settle p99 above 200ms for 5m"
+          description: "Likely causes: wallet row-lock contention, DB connection pool exhaustion, or a slow PESSIMISTIC_WRITE."
+
+      # Placement is the user-facing P99 — should stay under 100ms locally.
+      - alert: PlaceOrderLatencyP99High
+        expr: histogram_quantile(0.99, sum(rate(orders_place_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "OrderService.placeOrder p99 above 500ms for 5m"
+          description: "Most likely cause is wallet-service slowness (sync REST call); check SettleLatencyP99High in parallel."
+
+      # Rejection storms usually mean upstream is misbehaving (frontend bug, scanner)
+      # or someone is hitting a hot ratelimit / insufficient-funds wall.
+      - alert: OrderRejectionRateHigh
+        expr: sum(rate(orders_rejected_total[5m])) > 5
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Orders rejected at > 5/sec sustained for 5m"
+          description: "Inspect orders_rejected_total{reason} to find which path is firing."
+
+      # Kafka consumer lag would mean market-data is falling behind the matching engine.
+      # Frontend will show stale 24h stats.
+      - alert: MarketDataConsumerLag
+        expr: max(kafka_consumer_fetch_manager_records_lag_max{consumergroup="market-data-group"}) > 1000
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "market-data Kafka consumer lag > 1k records for 5m"
+          description: "Market-data 24h aggregates and the orderbook WebSocket broadcast will drift from reality."

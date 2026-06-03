@@ -7,6 +7,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.serhiileniv.order.client.WalletClient;
+import org.serhiileniv.order.config.TradingMetrics;
 import org.serhiileniv.order.kafka.event.OrderMatchedEvent;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
@@ -43,6 +44,9 @@ class OrderMatchingEngineTest {
 
     @Mock
     private TradingPairRepository tradingPairRepository;
+
+    @Mock
+    private TradingMetrics metrics;
 
     @InjectMocks
     private OrderMatchingEngine matchingEngine;
