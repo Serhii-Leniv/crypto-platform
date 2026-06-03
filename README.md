@@ -29,6 +29,7 @@ A **production-grade cryptocurrency exchange platform** built on a microservices
 - [Local Development](#local-development)
 - [Environment Variables](#environment-variables)
 - [Project Structure](#project-structure)
+- [Deeper Documentation](#deeper-documentation)
 
 ---
 
@@ -548,6 +549,15 @@ crypto-platform/
 ├── docker-compose.yml      # Full stack — 4× postgres, 2× redis, Kafka, Zipkin, Prom/Grafana, all 5 services + frontend
 └── pom.xml                 # Parent Maven POM (Java 21, Spring Boot 3.4.5)
 ```
+
+---
+
+## Deeper Documentation
+
+The README covers *what* and a summary of *why*. For the actual code paths and the engineering reasoning behind each major choice:
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — sequence diagrams for placement, matching, cancel, and stop activation; state distribution table; settlement breakdown; suggested code-reading order.
+- **[docs/decisions/](docs/decisions/)** — Architecture Decision Records. Each ADR is a short, immutable note on one significant choice: the context that forced the decision, the chosen path, the trade-offs, and the alternatives that were rejected. Start with [0001 — synchronous wallet REST](docs/decisions/0001-sync-wallet-rest-for-fund-locking.md).
 
 ---
 

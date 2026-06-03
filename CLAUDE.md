@@ -12,10 +12,52 @@ GIT_COMMITTER_NAME="Serhii Leniv" GIT_COMMITTER_EMAIL="leniv.tech@gmail.com" \
 git commit -m "feat: ..."
 ```
 
-- **Never commit to `main` directly** — use a feature branch.
+**Scale the workflow to the change** ([ADR-0007](docs/decisions/0007-solo-workflow-direct-push.md)):
+
+| Change size | Workflow |
+|---|---|
+| Trivial (≤2 files, no behaviour change: typos, README, dep bumps, comment-only) | Push directly to `main`. CI on `main` is the gate. |
+| Non-trivial (≥3 files OR new feature OR architectural change) | Feature branch → push → wait CI green → `git merge --ff-only` → push. **No PR.** |
+| Genuine multi-step / high-risk change | Open a PR for structural review value (description as commit message; full diff visible). |
+
+- **Conventional Commits**: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `ci:`, `docs:` — present tense, no trailing period.
 - **Push after completing work** — never leave unpushed commits.
-- **Conventional Commits**: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `ci:` — present tense, no trailing period.
-- **Before merging to main**: squash WIP commits so each commit on main is self-contained.
+- **Squash WIP** before merging a feature branch so every commit on `main` is self-contained.
+
+## Documentation Maintenance — proactively suggest, do not silently skip
+
+This repo maintains two evolving documentation artifacts:
+
+- **`docs/ARCHITECTURE.md`** — the "how it works" deep dive. Sequence diagrams, flow descriptions, state distribution.
+- **`docs/decisions/`** — Architecture Decision Records (ADRs). Immutable, numbered sequentially. See [`docs/decisions/README.md`](docs/decisions/README.md) for format and rules.
+
+When working on this codebase, follow these rules:
+
+1. **Update `docs/ARCHITECTURE.md` in the same commit** as any change that affects:
+   - A documented sequence diagram (flow 1–4 in that file).
+   - The state-distribution table (where state lives — memory, DB, Redis).
+   - The atomic settlement breakdown.
+   - The list of key files at the bottom.
+
+   If the architecture doc and the code disagree after a change, the doc is wrong — fix it.
+
+2. **Proactively suggest writing a new ADR** when the user is about to commit one of:
+   - A non-trivial choice between sync and async, or between REST and messaging.
+   - A schema design that locks in a constraint (composite keys, partitioning, soft-delete vs hard-delete).
+   - A library choice when at least one credible alternative exists.
+   - A workflow change.
+   - A correctness fix that changes a previously-accepted invariant.
+   - Removing a feature or dependency that was previously load-bearing.
+
+   The bar is: *would a future reader, looking at the diff alone, wonder why this was chosen?* If yes — offer to write the ADR before the commit lands. Don't write it silently; surface the suggestion and let the user decide.
+
+3. **ADRs are immutable.** If a previously-accepted decision is being reversed, do not edit the old ADR. Write a new ADR with the next sequential number that supersedes it, and update the old ADR's `Status` line to `Superseded by [NNNN](NNNN-...md)`.
+
+4. **One decision per ADR.** If a single change bundles three independent calls (e.g., "we picked Flyway, kept ddl-auto for tests, and added a seed profile"), surface that there are three ADRs to write, not one.
+
+5. **Numbering is sequential** — check `docs/decisions/` for the highest existing number and add one. Never reuse, never reorder.
+
+6. **Brevity beats completeness.** The format is Context / Decision / Consequences / Alternatives considered — usually 40–80 lines. Avoid 400-line essays.
 
 ## Build & Test Commands
 
