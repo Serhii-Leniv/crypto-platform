@@ -25,10 +25,10 @@ public class FailedEvent {
     @Column(nullable = false, length = 100)
     private String topic;
 
-    @Column(nullable = false)
+    @Column(name = "kafka_partition", nullable = false)
     private Integer partition;
 
-    @Column(nullable = false)
+    @Column(name = "kafka_offset", nullable = false)
     private Long offset;
 
     @Column(length = 255)
