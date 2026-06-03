@@ -7,13 +7,15 @@ import PrivateRoute from './auth/PrivateRoute';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 
-const HomePage         = lazy(() => import('./pages/HomePage'));
-const DashboardPage    = lazy(() => import('./pages/DashboardPage'));
-const TradePage        = lazy(() => import('./pages/TradePage'));
-const MyOrdersPage     = lazy(() => import('./pages/MyOrdersPage'));
-const WalletsPage      = lazy(() => import('./pages/WalletsPage'));
-const TransactionsPage = lazy(() => import('./pages/TransactionsPage'));
-const AdminPage        = lazy(() => import('./pages/AdminPage'));
+const HomePage          = lazy(() => import('./pages/HomePage'));
+const DashboardPage     = lazy(() => import('./pages/DashboardPage'));
+const MarketDetailPage  = lazy(() => import('./pages/MarketDetailPage'));
+const TradePage         = lazy(() => import('./pages/TradePage'));
+const MyOrdersPage      = lazy(() => import('./pages/MyOrdersPage'));
+const WalletsPage       = lazy(() => import('./pages/WalletsPage'));
+const TransactionsPage  = lazy(() => import('./pages/TransactionsPage'));
+const SettingsPage      = lazy(() => import('./pages/SettingsPage'));
+const AdminPage         = lazy(() => import('./pages/AdminPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,10 +47,12 @@ export default function App() {
                   <Route element={<Layout />}>
                     <Route index element={<HomePage />} />
                     <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/markets/:symbol" element={<MarketDetailPage />} />
                     <Route path="/trade" element={<TradePage />} />
                     <Route path="/my-orders" element={<MyOrdersPage />} />
                     <Route path="/wallets" element={<WalletsPage />} />
                     <Route path="/transactions" element={<TransactionsPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/admin" element={<AdminPage />} />
                   </Route>
                 </Route>

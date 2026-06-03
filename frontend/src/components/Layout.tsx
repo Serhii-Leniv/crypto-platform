@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import {
   IconDashboard, IconOrderBook, IconTrade, IconOrders,
-  IconWallet, IconHistory, IconLogout, IconMenu, IconX,
+  IconWallet, IconHistory, IconLogout, IconMenu, IconX, IconSettings,
 } from './icons';
 
 const links = [
@@ -13,6 +13,7 @@ const links = [
   { to: '/my-orders',    label: 'My Orders',     Icon: IconOrders,    end: false, admin: false },
   { to: '/wallets',      label: 'Portfolio',     Icon: IconWallet,    end: false, admin: false },
   { to: '/transactions', label: 'Transactions',  Icon: IconHistory,   end: false, admin: false },
+  { to: '/settings',     label: 'Settings',      Icon: IconSettings,  end: false, admin: false },
   { to: '/admin',        label: 'Admin',         Icon: IconOrders,    end: false, admin: true  },
 ];
 

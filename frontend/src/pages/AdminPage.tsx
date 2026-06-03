@@ -12,7 +12,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { formatPrice, formatQuantity, formatTimeAgo } from '../lib/format';
 import type { OrderResponse, OrderStatus, PageResponse } from '../types';
 
-type Tab = 'overview' | 'users' | 'orders' | 'markets';
+type Tab = 'overview' | 'metrics' | 'users' | 'orders' | 'markets';
 
 const STATUS_COLOR: Record<OrderStatus, string> = {
   PENDING:          '#0068ff',
@@ -71,6 +71,7 @@ function AdminPageContent() {
       <div className="flex items-center gap-1 mb-4" style={{ borderBottom: '1px solid #2a3441' }}>
         {([
           { id: 'overview', label: 'Overview' },
+          { id: 'metrics',  label: 'Metrics' },
           { id: 'users',    label: `Users${users ? ` (${users.length})` : ''}` },
           { id: 'orders',   label: `Orders${orders ? ` (${orders.totalElements})` : ''}` },
           { id: 'markets',  label: `Markets${markets ? ` (${markets.length})` : ''}` },
@@ -88,9 +89,52 @@ function AdminPageContent() {
       </div>
 
       {tab === 'overview' && <Overview overview={overview} />}
+      {tab === 'metrics'  && <MetricsTab />}
       {tab === 'users'    && <UsersTable users={users}   isLoading={usersLoading} />}
       {tab === 'orders'   && <OrdersTable orders={orders} isLoading={ordersLoading} users={users} />}
       {tab === 'markets'  && <MarketsTable markets={markets} isLoading={marketsLoading} />}
+    </div>
+  );
+}
+
+function MetricsTab() {
+  // Hostname swap: in-browser Grafana lives on the host's 3001, not the docker network.
+  const grafanaHost = typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:3001`
+    : 'http://localhost:3001';
+  const src = `${grafanaHost}/d/trading-engine/trading-engine-health?orgId=1&kiosk=tv&theme=dark&refresh=15s`;
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: '#f5f6f8' }}>Trading engine health</h3>
+          <p className="text-xs mt-0.5" style={{ color: '#6c7684' }}>
+            Live Grafana dashboard — domain metrics from <span className="mono">order-matching</span> and <span className="mono">wallet-service</span>.
+          </p>
+        </div>
+        <a
+          href={`${grafanaHost}/d/trading-engine/trading-engine-health?orgId=1&theme=dark`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs px-3 py-1.5 transition-colors"
+          style={{ background: '#11161d', border: '1px solid #2a3441', color: '#a0a8b4' }}
+        >
+          Open in Grafana →
+        </a>
+      </div>
+
+      <div style={{ background: '#0a0e14', border: '1px solid #2a3441', height: 900 }}>
+        <iframe
+          src={src}
+          title="Trading engine health"
+          style={{ width: '100%', height: '100%', border: 0 }}
+        />
+      </div>
+
+      <p className="text-[11px]" style={{ color: '#6c7684' }}>
+        Embed uses Grafana anonymous viewer (configured in <span className="mono">docker-compose.yml</span>).
+        If the panel is blank, ensure the Prometheus datasource is healthy and at least one trade has settled.
+      </p>
     </div>
   );
 }

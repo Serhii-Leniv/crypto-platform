@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getAllMarketData } from '../api/market';
 import Sparkline, { syntheticSparkline } from '../components/Sparkline';
@@ -87,6 +88,7 @@ function usePriceFlashes(rows: MarketDataResponse[]): Map<string, 'up' | 'down' 
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const { data: restData, isLoading, error } = useQuery<MarketDataResponse[]>({
     queryKey: ['market-data'],
     queryFn: getAllMarketData,
@@ -250,8 +252,15 @@ export default function DashboardPage() {
               return (
                 <tr
                   key={row.id + ':' + row.lastPrice}
+                  onClick={(e) => {
+                    // Don't navigate if the click landed on the star button
+                    if ((e.target as HTMLElement).closest('button')) return;
+                    navigate(`/markets/${encodeURIComponent(row.symbol)}`);
+                  }}
                   className={flash === 'up' ? 'flash-up' : flash === 'down' ? 'flash-down' : ''}
-                  style={{ borderBottom: '1px solid #1a2029' }}
+                  style={{ borderBottom: '1px solid #1a2029', cursor: 'pointer' }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(0,104,255,0.04)'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
                 >
                   <td className="px-2 py-2.5"><StarButton symbol={row.symbol} /></td>
                   <td className="px-3 py-2.5 mono text-xs" style={{ color: '#f5f6f8' }}>{row.symbol}</td>
