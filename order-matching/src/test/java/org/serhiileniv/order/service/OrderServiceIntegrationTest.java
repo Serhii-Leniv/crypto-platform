@@ -9,7 +9,9 @@ import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.model.OrderType;
+import org.serhiileniv.order.model.TradingPair;
 import org.serhiileniv.order.repository.OrderRepository;
+import org.serhiileniv.order.repository.TradingPairRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -46,11 +48,31 @@ class OrderServiceIntegrationTest {
     @Autowired
     OrderRepository orderRepository;
 
+    @Autowired
+    TradingPairRepository tradingPairRepository;
+
     @org.junit.jupiter.api.BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
         org.mockito.Mockito.when(kafkaTemplate.send(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(null));
+        // Flyway is disabled in test profile — seed trading pairs directly.
+        seedTradingPair("BTC-USDT", "BTC", "USDT", "0.00001", "0.01");
+        seedTradingPair("ETH-USDT", "ETH", "USDT", "0.0001",  "0.01");
+    }
+
+    private void seedTradingPair(String symbol, String base, String quote, String minQty, String tickSize) {
+        if (tradingPairRepository.existsById(symbol)) return;
+        tradingPairRepository.save(TradingPair.builder()
+                .symbol(symbol)
+                .baseCurrency(base)
+                .quoteCurrency(quote)
+                .minQuantity(new BigDecimal(minQty))
+                .tickSize(new BigDecimal(tickSize))
+                .status("ACTIVE")
+                .makerFeeBps(10)
+                .takerFeeBps(20)
+                .build());
     }
 
     @Test

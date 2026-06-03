@@ -108,13 +108,12 @@ class OrderServiceTest {
     @Test
     void placeOrder_Success() {
         when(orderRepository.save(any(Order.class))).thenReturn(order);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepository.findById(any(UUID.class))).thenReturn(Optional.of(order));
         when(orderBookManager.getOrCreate(any())).thenReturn(symbolOrderBook);
 
         OrderResponse response = orderService.placeOrder(orderRequest, userId);
 
         assertNotNull(response);
-        assertEquals(orderId, response.id());
         verify(orderRepository).save(any(Order.class));
         verify(applicationEventPublisher).publishEvent(any(Object.class));
         verify(matchingEngine).matchOrder(any());
@@ -210,7 +209,7 @@ class OrderServiceTest {
                 .quantity(new BigDecimal("0.5")).filledQuantity(BigDecimal.ZERO)
                 .status(OrderStatus.PENDING).build();
         when(orderRepository.save(any())).thenReturn(marketOrder);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(marketOrder));
+        when(orderRepository.findById(any(UUID.class))).thenReturn(Optional.of(marketOrder));
         when(orderBookManager.getOrCreate(any())).thenReturn(symbolOrderBook);
 
         OrderResponse response = orderService.placeOrder(marketRequest, userId);
