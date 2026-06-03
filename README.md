@@ -11,55 +11,83 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-ready-326CE5?style=flat-square&logo=kubernetes&logoColor=white)](k8s/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-A **production-grade cryptocurrency exchange platform** built on a microservices architecture. The system handles user authentication, real-exchange order placement (LIMIT / MARKET / STOP_LIMIT with GTC, IOC, FOK, POST_ONLY time-in-force), price-time-priority matching with self-trade prevention, atomic synchronous wallet settlement, and real-time market data over WebSocket — with Apache Kafka used as an informational analytics stream.
+A **microservices crypto trading platform** that behaves like a real exchange — not a bootcamp demo. Orders lock funds synchronously before entering the book, matches settle atomically across both wallets in one transaction, the engine refuses to trade a user against themselves, and `IOC` / `FOK` / `POST_ONLY` actually do what their names imply.
+
+**The interesting parts** — in priority order, what to look at if you only have ten minutes:
+
+- **Synchronous fund locking before book entry** ([ADR-0001](docs/decisions/0001-sync-wallet-rest-for-fund-locking.md)) — fixes a class of correctness bugs in the async-Kafka shape it replaced.
+- **Atomic 4-wallet settlement in one transaction** ([ADR-0002](docs/decisions/0002-atomic-settlement-transaction.md)) — buyer-base, buyer-quote, seller-base, seller-quote, fees, slippage refund — all-or-nothing.
+- **In-memory order book under per-symbol `ReentrantLock`** ([ADR-0003](docs/decisions/0003-in-memory-order-book.md)) — `TreeMap<BigDecimal, ArrayDeque<Order>>`, replayed from Postgres on startup.
+- **Real-exchange order semantics** ([ADR-0006](docs/decisions/0006-real-exchange-order-semantics.md)) — GTC / IOC / FOK / POST_ONLY with compensating unlocks, self-trade prevention, stop-limit via scheduled activation.
+- **One Postgres per service** ([ADR-0004](docs/decisions/0004-separate-postgres-per-service.md)) — independent schemas, independent failure domains, no cross-service joins by construction.
+
+**Where to start**, depending on who you are:
+
+| You are… | Start here |
+|---|---|
+| A recruiter scanning for tech | The badges above + [Quick Start](#quick-start) (one command to a running stack) |
+| An engineer wanting to read the code | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — sequence diagrams + the 8 files worth reading first |
+| Someone curious about *why* it's built this way | [docs/decisions/](docs/decisions/) — 7 short ADRs |
+| Trying it locally right now | `cp .env.example .env && docker compose up --build`; log in as `alice@demo.io` / `Password1` |
 
 ---
 
 ## Table of Contents
 
-- [Key Features](#key-features)
-- [Architecture](#architecture)
+- [Key Features](#key-features) — what the platform actually does
+- [Architecture](#architecture) — services, data stores, the diagram
 - [Technology Stack](#technology-stack)
-- [Quick Start](#quick-start)
+- [Quick Start](#quick-start) — clone, `docker compose up`, log in as `alice@demo.io`
 - [API Reference](#api-reference)
 - [Order Matching](#order-matching)
-- [Design Decisions](#design-decisions)
+- [Engineering Depth](#engineering-depth) — ADRs + `docs/ARCHITECTURE.md`
 - [Observability](#observability)
 - [Kubernetes](#kubernetes)
 - [Local Development](#local-development)
 - [Environment Variables](#environment-variables)
 - [Project Structure](#project-structure)
-- [Deeper Documentation](#deeper-documentation)
 
 ---
 
 ## Key Features
 
+### Trading mechanics
+
 | Feature | Details |
 |---|---|
-| **JWT Authentication** | Stateless access tokens (15 min) + httpOnly refresh-token cookie with rotation (7 days) |
-| **Real-Exchange Matching** | Price-time-priority in-memory order book — `LIMIT`, `MARKET`, `STOP_LIMIT`; `ReentrantLock` per symbol |
-| **Time-in-Force** | `GTC` (default), `IOC`, `FOK`, `POST_ONLY` — all enforced before / after match with compensating unlocks |
-| **Synchronous Fund Lock** | Order-matching calls wallet-service `/internal/wallets/lock` via REST **before** the order enters the book — no trading on credit |
-| **Atomic 4-Wallet Settlement** | A single `@Transactional` `/internal/wallets/settle` moves base + quote between buyer and seller and applies maker/taker fees |
-| **Self-Trade Prevention** | Matching engine skips counterparties owned by the same user |
-| **Maker / Taker Fees** | Configurable per trading pair in basis points (bps), deducted from the received asset |
+| **Real-Exchange Matching** | Price-time-priority in-memory order book — `LIMIT`, `MARKET`, `STOP_LIMIT`; per-symbol `ReentrantLock` |
+| **Time-in-Force** | `GTC` (default), `IOC`, `FOK`, `POST_ONLY` — enforced before / after match with compensating unlocks |
+| **Synchronous Fund Lock** | Wallet REST `/internal/wallets/lock` runs **before** the order enters the book — no trading on credit |
+| **Atomic 4-Wallet Settlement** | One `@Transactional` `/internal/wallets/settle` moves base + quote between buyer and seller, applies maker / taker fees, and refunds buyer slippage |
+| **Self-Trade Prevention** | Matching engine skips counterparties owned by the same user; `FOK` feasibility scan respects STP |
 | **Trading-Pair Registry** | DB-backed whitelist with `tick_size` and `min_quantity` validation on every order |
-| **Stop Orders** | `STOP_LIMIT` parked as `TRIGGER_PENDING`; `StopOrderMonitor` activates when market price crosses `trigger_price` |
-| **Buyer-Slippage Refund** | Settlement unlocks the difference between buyer limit price and execution price on every fill |
-| **Demo Seed** | `SPRING_PROFILES_ACTIVE=dev` seeds 3 users (alice/bob/charlie, `Password1`), wallets, trading pairs, and open orders |
+| **Stop Orders** | `STOP_LIMIT` parked as `TRIGGER_PENDING` with funds locked; `StopOrderMonitor` activates on price-cross |
 | **WebSocket Market Data** | STOMP over SockJS — `/topic/orderbook/{symbol}`, `/topic/trades/{symbol}`, `/topic/market-data` |
 | **Truthful 24 h Stats** | Aggregated from a `trades` table every 30 s, cached in Redis with midnight eviction |
-| **Circuit Breaker** | Resilience4j circuit breakers on all gateway routes — fail-fast with graceful fallbacks |
-| **Distributed Tracing** | Micrometer Tracing + Zipkin — full request trace across every microservice |
-| **Rate Limiting** | Redis-backed token-bucket rate limiter on auth endpoints at the gateway |
+
+### Platform & security
+
+| Feature | Details |
+|---|---|
+| **JWT Authentication** | Stateless access token (15 min) + `httpOnly` refresh-token cookie with rotation (7 days) |
 | **API Gateway** | Single entry point — JWT filter, `X-User-Id` injection, CORS, rate limiting, circuit breaker |
+| **Rate Limiting** | Redis-backed token-bucket on auth endpoints at the gateway |
+| **Circuit Breaker** | Resilience4j on every downstream route — fail-fast 503 on partial outage |
+| **Admin Role** | `is_admin` column → JWT claim → `requireAdmin` gateway filter on `/api/v1/admin/**` |
 | **Virtual Threads** | All four WebMVC services run on Java 21 virtual threads |
+| **Demo Seed** | `dev` profile seeds 3 users (`alice`/`bob`/`charlie`, password `Password1`), wallets, trading pairs, open orders |
+
+### Ops & reliability
+
+| Feature | Details |
+|---|---|
+| **One Postgres per service** | `postgres-auth/order/wallet/market` — independent migrations and failure domains |
 | **Flyway Migrations** | Versioned schema + repeatable seed scripts on every service DB |
 | **DLQ + Replay** | Kafka business failures retried with exponential backoff, then routed to DLT; failed events visible in the admin panel for manual replay |
-| **OpenAPI / Swagger UI** | Interactive docs at `/swagger-ui.html` on every service |
+| **Distributed Tracing** | Micrometer Tracing + Zipkin — full request trace across every microservice |
 | **Prometheus + Grafana** | Pre-provisioned metrics dashboard, one `docker compose up` away |
-| **Fully Dockerized** | One-command startup — infra and all five services + frontend |
+| **OpenAPI / Swagger UI** | Interactive docs at `/swagger-ui.html` on every service |
+| **Fully Dockerized** | One-command startup — infra + all five services + frontend |
 | **Kubernetes Ready** | Deployment manifests, Services, and Ingress in `k8s/` |
 
 ---
@@ -318,6 +346,19 @@ The **refresh token** is set as an `httpOnly`, `Secure`-on-prod cookie (`refresh
 | GET | `/` | No | List 24 h stats for all symbols |
 | GET | `/{symbol}` | No | Get 24 h stats for a specific symbol |
 
+**Response**:
+```json
+{
+  "symbol": "BTC-USDT",
+  "lastPrice": 45123.50,
+  "openPrice24h": 44800.00,
+  "high24h": 45500.00,
+  "low24h": 44200.00,
+  "volume24h": 123.456,
+  "tradeCount24h": 87
+}
+```
+
 WebSocket (STOMP over SockJS, served by `market-data` and `order-matching`):
 
 | Topic | Source |
@@ -335,96 +376,33 @@ Available to authenticated users; in `dev` profile the demo `alice` account is t
 | GET  | `/failed-events` | Dead-letter queue: Kafka events that exceeded retries |
 | POST | `/failed-events/{id}/replay` | Manually replay a single failed event |
 
-**Response**:
-```json
-{
-  "symbol": "BTC-USDT",
-  "lastPrice": 45123.50,
-  "openPrice24h": 44800.00,
-  "high24h": 45500.00,
-  "low24h": 44200.00,
-  "volume24h": 123.456,
-  "tradeCount24h": 87
-}
-```
-
 ---
 
 ## Order Matching
 
 Price-time priority over an in-memory book. The path is fully synchronous so the API caller knows whether the order was accepted, rejected, locked, matched, and settled by the time the HTTP response returns.
 
-### Place a LIMIT BUY at 45,000 USDT for 0.1 BTC-USDT
+The headline shape: **validate → lock funds (sync REST) → persist → TIF pre-checks → enter book → match → settle (atomic) → respond**. Stop-limits skip the book and park as `TRIGGER_PENDING` until a `@Scheduled` monitor sees the trigger price cross.
 
-1. `OrderService.placeOrder()` validates the symbol against `trading_pairs` (whitelist, tick size, min quantity).
-2. A fresh `orderId = UUID.randomUUID()` is generated locally so it can be referenced before persistence.
-3. `walletClient.lock(userId, "USDT", 4500, orderId)` calls `POST /internal/wallets/lock` on wallet-service. The wallet service runs the lock inside a `@Transactional` `PESSIMISTIC_WRITE` and returns `200` or `409 Insufficient`. A failure here aborts placement before the order ever exists.
-4. The order is persisted with `status = PENDING` (`Persistable<UUID>` keeps Spring Data on the `INSERT` path).
-5. **Time-in-force gates run before the book accepts the order:**
-   - `POST_ONLY` → reject if the limit would cross the top of the opposite side (compensating unlock fires).
-   - `FOK` → scan the opposite side respecting STP; reject unless the full quantity can be filled (compensating unlock fires).
-6. The order is added to the per-symbol `SymbolOrderBook` (`TreeMap<BigDecimal, ArrayDeque<Order>>`) under its `ReentrantLock`.
-7. `OrderMatchingEngine.matchOrder()` walks the opposite side. For every match candidate:
-   - **STP**: skip if `counterparty.userId == newOrder.userId`.
-   - `executeMatch()` updates the in-memory fill quantities of both orders.
-   - `walletClient.settle()` runs the 4-wallet transfer + maker/taker fees in a single wallet-service transaction. If settle throws, the matching transaction rolls back and the caller sees the failure synchronously.
-   - Both orders are saved; fully filled counterparties are removed from the book.
-   - `OrderMatchedEvent` is published to Kafka (informational, for market-data).
-8. `OrderPlacedEvent` is published to Kafka (also informational).
-9. **IOC** cancels any unfilled remainder after matching and fires a compensating unlock.
-10. The HTTP response carries the final order status (`PENDING`, `PARTIALLY_FILLED`, `FILLED`, or `CANCELLED`).
-
-### `STOP_LIMIT`
-
-Persisted as `TRIGGER_PENDING` (never enters the book at placement). Funds are still locked synchronously. A `@Scheduled` `StopOrderMonitor` polls last prices every 3 s; when a BUY-stop sees `lastPrice >= triggerPrice` (or a SELL-stop sees `lastPrice <= triggerPrice`), the order flips to `PENDING`, is added to the book, and matched in the normal path.
-
-### Cancel
-
-`OrderService.cancelOrder()` flips status to `CANCELLED`, removes the order from the book, and calls `walletClient.unlock()` to return the remaining locked quantity in one shot.
-
-### Slippage refund
-
-When a buyer is matched below its limit, settlement computes `(buyerLimitPrice − executionPrice) × quantity` in quote currency and unlocks it back to the buyer in the same wallet-service transaction.
-
-### Idempotency
-
-`processed_events` in wallet-service has a composite `(event_id, event_type)` unique index so the same `orderId` can appear for both `ORDER_PLACED` and `ORDER_CANCELLED` without collisions, while replays of the same event are silently skipped.
+For the step-by-step walkthrough with Mermaid sequence diagrams (place / match / cancel / stop activation), see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ---
 
-## Design Decisions
+## Engineering Depth
 
-### Why synchronous REST for fund locking instead of Kafka?
+Each significant design choice is documented as a short **Architecture Decision Record** — context, decision, consequences, and the alternatives that were rejected:
 
-The earlier design locked funds asynchronously via `OrderPlacedEvent` → Kafka → wallet consumer. That left a window where an order was visible to the matching engine before its funds were actually reserved — effectively allowing trades on credit. Real exchanges (Binance, Coinbase) lock funds atomically with order acceptance. The current path calls `wallet-service` over REST inside `OrderService.placeOrder()`; the order is only persisted and added to the book after the lock succeeds. Kafka remains in the picture as an **informational** stream (consumed by `market-data`) — it is no longer a critical correctness dependency.
+| # | Decision | What it pins down |
+|---|---|---|
+| [0001](docs/decisions/0001-sync-wallet-rest-for-fund-locking.md) | Synchronous wallet REST for fund locking | Why the old async-Kafka shape was a correctness bug, not a design choice |
+| [0002](docs/decisions/0002-atomic-settlement-transaction.md) | Atomic 4-wallet settlement in one transaction | How partial-settlement inconsistency is made impossible |
+| [0003](docs/decisions/0003-in-memory-order-book.md) | In-memory order book with per-symbol `ReentrantLock` | Why match latency is in-heap, not in-database |
+| [0004](docs/decisions/0004-separate-postgres-per-service.md) | Separate Postgres per service | True service ownership of schema + independent failure domains |
+| [0005](docs/decisions/0005-persistable-uuid-for-orders.md) | `Persistable<UUID>` for pre-generated order IDs | The JPA reason behind a 5-line entity quirk |
+| [0006](docs/decisions/0006-real-exchange-order-semantics.md) | TIF, STP, stop-limit | What each compensation path actually does |
+| [0007](docs/decisions/0007-solo-workflow-direct-push.md) | Solo workflow — direct push for trivia | Why this repo dropped its PR-Agent pipeline |
 
-### Why one atomic settlement transaction instead of four events?
-
-`OrderMatched` originally fanned out four separate wallet movements: buyer-base, buyer-quote, seller-base, seller-quote. If the consumer crashed between two of them the wallets stayed inconsistent. The single `/internal/wallets/settle` endpoint applies all four credits/debits, the maker/taker fees, and the buyer slippage refund inside one `@Transactional` block — either all of it lands or none of it does.
-
-### Why a separate Postgres per service?
-
-Each service owns its schema. Sharing a single Postgres makes schema changes a coordination problem and a single migration mistake can take the whole platform down. Four separate `postgres-*` containers (`postgres-auth`, `postgres-order`, `postgres-wallet`, `postgres-market`) give each service independent migration history, independent failure domains, and the freedom to vacuum / index without affecting the others.
-
-### Why an in-memory order book with `ReentrantLock` per symbol?
-
-A SQL-backed book at trading load would serialize every match through the database. The in-memory `SymbolOrderBook` (`TreeMap<BigDecimal, ArrayDeque<Order>>`) gives O(log n) best-price lookup and O(1) FIFO at each price level under a single per-symbol `ReentrantLock`. PostgreSQL is still the durable source of truth — `OrderBookInitializer` (`ApplicationRunner`) replays all open orders into the book at startup.
-
-### Why Circuit Breakers at the gateway?
-
-Resilience4j wraps every downstream route. If a service is unhealthy, the gateway returns a fast `503` instead of holding HTTP connections open for 30 s — this prevents thread-pool exhaustion and keeps the rest of the platform responsive.
-
-### Why two Redis instances?
-
-Auth refresh tokens and market data have completely different eviction strategies — auth tokens are evicted by TTL or logout, market data is evicted at midnight or on a fresh trade. Separate instances isolate configuration and prevent a market-data flush from clobbering live login sessions.
-
-### Why Flyway over `ddl-auto=create`?
-
-`ddl-auto=update` is fine for prototyping but silently drops columns on rename and cannot be applied to production without risk. Flyway provides versioned, repeatable, reviewable SQL migrations with a full history in `flyway_schema_history` per service.
-
-### Why `dev` and `prod` Spring profiles?
-
-`SPRING_PROFILES_ACTIVE=dev` (the default in `.env.example`) runs repeatable Flyway seeds (`R__seed_*.sql`) that populate 3 demo users (alice / bob / charlie, password `Password1`), their wallets, trading pairs, and open orders — clone, `docker compose up`, and the platform has data to trade against. `prod` skips the seed and tightens log levels.
+For the wider how-it-works narrative (sequence diagrams, state-distribution table, failure modes, settlement breakdown), see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ---
 
@@ -549,15 +527,6 @@ crypto-platform/
 ├── docker-compose.yml      # Full stack — 4× postgres, 2× redis, Kafka, Zipkin, Prom/Grafana, all 5 services + frontend
 └── pom.xml                 # Parent Maven POM (Java 21, Spring Boot 3.4.5)
 ```
-
----
-
-## Deeper Documentation
-
-The README covers *what* and a summary of *why*. For the actual code paths and the engineering reasoning behind each major choice:
-
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — sequence diagrams for placement, matching, cancel, and stop activation; state distribution table; settlement breakdown; suggested code-reading order.
-- **[docs/decisions/](docs/decisions/)** — Architecture Decision Records. Each ADR is a short, immutable note on one significant choice: the context that forced the decision, the chosen path, the trade-offs, and the alternatives that were rejected. Start with [0001 — synchronous wallet REST](docs/decisions/0001-sync-wallet-rest-for-fund-locking.md).
 
 ---
 
