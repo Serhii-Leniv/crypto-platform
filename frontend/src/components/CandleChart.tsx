@@ -21,6 +21,7 @@ export interface OrderLine {
 
 interface Props {
   candles: Candle[];
+  /** Optional fixed height; if omitted the chart fills its container via ResizeObserver. */
   height?: number;
   /** User's open orders for the current symbol; rendered as horizontal price lines. */
   orderLines?: OrderLine[];
@@ -30,7 +31,7 @@ interface Props {
  * Bloomberg-style dark candlestick chart with volume sub-pane.
  * Uses TradingView's lightweight-charts library (~40KB, Apache 2.0).
  */
-export default function CandleChart({ candles, height = 420, orderLines = [] }: Props) {
+export default function CandleChart({ candles, height, orderLines = [] }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -64,7 +65,7 @@ export default function CandleChart({ candles, height = 420, orderLines = [] }: 
         secondsVisible: false,
       },
       width: containerRef.current.clientWidth,
-      height,
+      height: height ?? containerRef.current.clientHeight,
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -89,15 +90,23 @@ export default function CandleChart({ candles, height = 420, orderLines = [] }: 
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
 
+    // Observe both window resize AND parent container size changes so the chart
+    // resizes when its flex parent grows/shrinks (e.g., viewport-fill layouts).
     const resize = () => {
       if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth });
+        chart.applyOptions({
+          width: containerRef.current.clientWidth,
+          height: height ?? containerRef.current.clientHeight,
+        });
       }
     };
     window.addEventListener('resize', resize);
+    const ro = new ResizeObserver(resize);
+    ro.observe(containerRef.current);
 
     return () => {
       window.removeEventListener('resize', resize);
+      ro.disconnect();
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -158,5 +167,5 @@ export default function CandleChart({ candles, height = 420, orderLines = [] }: 
     }
   }, [orderLines]);
 
-  return <div ref={containerRef} style={{ width: '100%' }} />;
+  return <div ref={containerRef} style={{ width: '100%', height: height ?? '100%' }} />;
 }
