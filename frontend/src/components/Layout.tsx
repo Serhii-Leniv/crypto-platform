@@ -33,7 +33,7 @@ export default function Layout() {
   const visibleLinks = links.filter((l) => !l.admin || isAdmin);
 
   return (
-    <div className="flex min-h-screen" style={{ background: '#0a0e14' }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: '#0a0e14' }}>
       {open && (
         <div
           className="fixed inset-0 z-20 md:hidden"
