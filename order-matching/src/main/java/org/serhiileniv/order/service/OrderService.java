@@ -9,7 +9,6 @@ import org.serhiileniv.order.dto.OrderRequest;
 import org.serhiileniv.order.dto.OrderResponse;
 import org.serhiileniv.order.exception.InvalidSymbolException;
 import org.serhiileniv.order.exception.OrderNotFoundException;
-import org.serhiileniv.order.kafka.OrderEventProducer;
 import org.serhiileniv.order.kafka.event.OrderCancelledEvent;
 import org.serhiileniv.order.kafka.event.OrderPlacedEvent;
 import org.serhiileniv.order.model.Order;
@@ -24,7 +23,6 @@ import org.serhiileniv.order.repository.OrderRepository;
 import org.serhiileniv.order.repository.TradingPairRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -41,11 +39,11 @@ import java.util.stream.Collectors;
 public class OrderService {
         private final OrderRepository orderRepository;
         private final OrderMatchingEngine matchingEngine;
-        private final ApplicationEventPublisher applicationEventPublisher;
         private final OrderBookManager orderBookManager;
         private final TradingPairRepository tradingPairRepository;
         private final WalletClient walletClient;
         private final TradingMetrics metrics;
+        private final OutboxService outboxService;
 
         @PersistenceContext
         private EntityManager entityManager;
@@ -133,7 +131,7 @@ public class OrderService {
                                 order.getPrice(),
                                 order.getQuantity(),
                                 LocalDateTime.now());
-                applicationEventPublisher.publishEvent(placedEvent);
+                outboxService.recordOrderPlaced(placedEvent);
 
                 matchingEngine.matchOrder(order);
 
@@ -273,7 +271,7 @@ public class OrderService {
                                 order.getPrice(),
                                 "Cancelled by user",
                                 LocalDateTime.now());
-                applicationEventPublisher.publishEvent(cancelledEvent);
+                outboxService.recordOrderCancelled(cancelledEvent);
                 log.info("Order cancelled: {}", orderId);
         }
 

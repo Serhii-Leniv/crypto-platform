@@ -16,7 +16,6 @@ import org.serhiileniv.order.orderbook.OrderBookManager;
 import org.serhiileniv.order.orderbook.SymbolOrderBook;
 import org.serhiileniv.order.repository.OrderRepository;
 import org.serhiileniv.order.repository.TradingPairRepository;
-import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -34,9 +33,6 @@ class OrderMatchingEngineTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private ApplicationEventPublisher applicationEventPublisher;
-
-    @Mock
     private OrderBookManager orderBookManager;
 
     @Mock
@@ -47,6 +43,9 @@ class OrderMatchingEngineTest {
 
     @Mock
     private TradingMetrics metrics;
+
+    @Mock
+    private OutboxService outboxService;
 
     @InjectMocks
     private OrderMatchingEngine matchingEngine;
@@ -78,7 +77,7 @@ class OrderMatchingEngineTest {
 
         verify(orderRepository, atLeastOnce()).save(newBuyOrder);
         verify(orderRepository, atLeastOnce()).save(sellOrder);
-        verify(applicationEventPublisher).publishEvent(any(Object.class));
+        verify(outboxService).recordOrderMatched(any());
     }
 
     @Test
@@ -166,7 +165,7 @@ class OrderMatchingEngineTest {
 
         assertTrue(events.isEmpty());
         assertEquals(OrderStatus.PENDING, buyOrder.getStatus());
-        verify(applicationEventPublisher, never()).publishEvent(any());
+        verify(outboxService, never()).recordOrderMatched(any());
     }
 
     @Test

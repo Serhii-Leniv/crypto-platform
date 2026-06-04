@@ -18,6 +18,7 @@ Code shows *what* the system does today. Git history shows *when* it changed. Ne
 | [0006](0006-real-exchange-order-semantics.md) | Real-exchange order semantics — TIF, STP, stop-limit | Accepted |
 | [0007](0007-solo-workflow-direct-push.md) | Solo workflow — direct push for trivia, FF-merge for features | Accepted |
 | [0008](0008-fees-credited-to-house-wallet.md) | Maker / taker fees credited to a house wallet | Accepted |
+| [0009](0009-transactional-outbox-for-kafka.md) | Transactional outbox for Kafka events | Accepted |
 
 ## Format
 

@@ -11,7 +11,6 @@ import org.serhiileniv.order.config.TradingMetrics;
 import org.serhiileniv.order.dto.OrderRequest;
 import org.serhiileniv.order.dto.OrderResponse;
 import org.serhiileniv.order.exception.OrderNotFoundException;
-import org.serhiileniv.order.kafka.OrderEventProducer;
 import org.serhiileniv.order.model.Order;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
@@ -21,7 +20,6 @@ import org.serhiileniv.order.orderbook.OrderBookManager;
 import org.serhiileniv.order.orderbook.SymbolOrderBook;
 import org.serhiileniv.order.repository.OrderRepository;
 import org.serhiileniv.order.repository.TradingPairRepository;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -46,8 +44,6 @@ class OrderServiceTest {
     @Mock
     private OrderMatchingEngine matchingEngine;
     @Mock
-    private ApplicationEventPublisher applicationEventPublisher;
-    @Mock
     private OrderBookManager orderBookManager;
     @Mock
     private SymbolOrderBook symbolOrderBook;
@@ -57,6 +53,8 @@ class OrderServiceTest {
     private WalletClient walletClient;
     @Mock
     private TradingMetrics metrics;
+    @Mock
+    private OutboxService outboxService;
 
     @InjectMocks
     private OrderService orderService;
@@ -118,7 +116,7 @@ class OrderServiceTest {
 
         assertNotNull(response);
         verify(orderRepository).save(any(Order.class));
-        verify(applicationEventPublisher).publishEvent(any(Object.class));
+        verify(outboxService).recordOrderPlaced(any());
         verify(matchingEngine).matchOrder(any());
     }
 
@@ -131,7 +129,7 @@ class OrderServiceTest {
 
         assertEquals(OrderStatus.CANCELLED, order.getStatus());
         verify(orderRepository).save(order);
-        verify(applicationEventPublisher).publishEvent(any(Object.class));
+        verify(outboxService).recordOrderCancelled(any());
     }
 
     @Test

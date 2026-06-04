@@ -402,6 +402,8 @@ Each significant design choice is documented as a short **Architecture Decision 
 | [0005](docs/decisions/0005-persistable-uuid-for-orders.md) | `Persistable<UUID>` for pre-generated order IDs | The JPA reason behind a 5-line entity quirk |
 | [0006](docs/decisions/0006-real-exchange-order-semantics.md) | TIF, STP, stop-limit | What each compensation path actually does |
 | [0007](docs/decisions/0007-solo-workflow-direct-push.md) | Solo workflow — direct push for trivia | Why this repo dropped its PR-Agent pipeline |
+| [0008](docs/decisions/0008-fees-credited-to-house-wallet.md) | Maker / taker fees credited to a house wallet | Fees no longer evaporate; conservation invariant restored |
+| [0009](docs/decisions/0009-transactional-outbox-for-kafka.md) | Transactional outbox for Kafka events | How dual-write to DB + Kafka is made atomic at-least-once |
 
 For the wider how-it-works narrative (sequence diagrams, state-distribution table, failure modes, settlement breakdown), see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 

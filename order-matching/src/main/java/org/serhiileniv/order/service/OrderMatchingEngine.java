@@ -14,7 +14,6 @@ import org.serhiileniv.order.orderbook.OrderBookManager;
 import org.serhiileniv.order.orderbook.SymbolOrderBook;
 import org.serhiileniv.order.repository.OrderRepository;
 import org.serhiileniv.order.repository.TradingPairRepository;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,11 +29,11 @@ import java.util.UUID;
 public class OrderMatchingEngine {
 
     private final OrderRepository orderRepository;
-    private final ApplicationEventPublisher applicationEventPublisher;
     private final OrderBookManager orderBookManager;
     private final WalletClient walletClient;
     private final TradingPairRepository tradingPairRepository;
     private final TradingMetrics metrics;
+    private final OutboxService outboxService;
 
     @Transactional
     public List<OrderMatchedEvent> matchOrder(Order newOrder) {
@@ -95,7 +94,7 @@ public class OrderMatchingEngine {
                 orderRepository.save(counterparty);
                 orderRepository.save(newOrder);
                 if (counterparty.isFullyFilled()) book.remove(counterparty);
-                applicationEventPublisher.publishEvent(event);
+                outboxService.recordOrderMatched(event);
                 metrics.recordFill(event.getSymbol(), event.getQuantity());
                 log.info("Matched {} units @ {} for trade {}", event.getQuantity(), event.getPrice(), event.getTradeId());
             }

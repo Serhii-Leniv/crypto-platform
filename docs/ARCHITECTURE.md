@@ -35,7 +35,7 @@ State distribution at a glance:
 | Where | What lives there |
 |---|---|
 | `postgres-auth` | `users`, `refresh_tokens` |
-| `postgres-order` | `orders`, `trading_pairs` |
+| `postgres-order` | `orders`, `trading_pairs`, `outbox_events` |
 | `postgres-wallet` | `wallets`, `transactions`, `processed_events`, `failed_events` |
 | `postgres-market` | `market_data`, `trades` |
 | `redis-auth` | refresh-token revocation set |
@@ -76,7 +76,7 @@ sequenceDiagram
         OS-->>FE: 409 FokRejected
     end
     OS->>Book: book.add(order)
-    OS->>K: publish OrderPlacedEvent (informational)
+    OS->>OS: outboxService.record(ORDER_PLACED) — same DB tx ([ADR-0009](decisions/0009-transactional-outbox-for-kafka.md))
     OS->>ME: matchOrder(order)
     Note over ME: see Flow 2
     OS->>OS: re-read order from DB (status updated by ME)
@@ -127,7 +127,7 @@ sequenceDiagram
             W-->>WC: 200 (single @Transactional, 4 wallet movements + fees + buyer slippage refund)
             ME->>DB: save(counterparty) + save(newOrder)
             ME->>Book: remove(counterparty) if fully filled
-            ME->>K: publish OrderMatchedEvent (informational)
+            ME->>ME: outboxService.record(ORDER_MATCHED) — same DB tx
         end
     end
     ME->>Book: remove(newOrder) if fully filled
@@ -207,6 +207,37 @@ Funds were already locked at placement, so activation is purely a state transiti
 All movements share one transaction. A failure at any step rolls back all of them and the matching engine's outer transaction rolls back the in-memory fill it just applied (re-thrown exception). Conservation invariant: per trade `Σ deposits = Σ debits` (fees are no longer lost — they go to the house user `00000000-0000-0000-0000-00000000feee`).
 
 Idempotency: `processed_events` has a composite unique index on `(event_id, event_type)` so the same `tradeId` for `ORDER_MATCHED` is safe to retry but does not block a later `ORDER_CANCELLED` for the same `orderId`.
+
+---
+
+## Flow 5 — Outbox → Kafka
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant OP as OutboxPublisher<br/>@Scheduled(500ms)
+    participant DB as postgres-order<br/>outbox_events
+    participant K as Kafka order-events
+    participant MD as market-data
+
+    loop every 500ms
+        OP->>DB: SELECT ... WHERE published_at IS NULL ORDER BY created_at LIMIT 100
+        opt batch non-empty
+            loop for each row
+                OP->>K: send(topic, aggregateId, payload)
+                alt broker acks
+                    K-->>OP: ack
+                    OP->>DB: UPDATE outbox_events SET published_at = now() WHERE id = ?
+                    K->>MD: deliver to consumer group market-data-group
+                else timeout / error
+                    OP->>DB: UPDATE outbox_events SET attempts = attempts + 1, last_error = ?
+                end
+            end
+        end
+    end
+```
+
+The outbox makes Kafka publishing durable: every domain event is written into `outbox_events` inside the same DB transaction as the order mutation, so a broker outage delays publication but never loses an event. See [ADR-0009](decisions/0009-transactional-outbox-for-kafka.md).
 
 ---
 
