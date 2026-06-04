@@ -24,6 +24,9 @@ public class WalletMetrics {
         sample.stop(Timer.builder("wallet.settle.duration")
                 .description("WalletService.settleTrade end-to-end duration")
                 .publishPercentiles(0.5, 0.95, 0.99)
+                // Emit Prometheus _bucket series too, so histogram_quantile() in Grafana
+                // can aggregate across instances.
+                .publishPercentileHistogram()
                 .register(registry));
     }
 

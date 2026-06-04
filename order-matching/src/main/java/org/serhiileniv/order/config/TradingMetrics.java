@@ -55,6 +55,10 @@ public class TradingMetrics {
                 .description("End-to-end placeOrder duration")
                 .tag("outcome", outcome)
                 .publishPercentiles(0.5, 0.95, 0.99)
+                // Emit Prometheus _bucket series too, so histogram_quantile() in Grafana
+                // can aggregate across instances. Without this the quantile labels above
+                // are emitted as a summary, which PromQL bucket math can't read.
+                .publishPercentileHistogram()
                 .register(registry));
     }
 
@@ -86,6 +90,10 @@ public class TradingMetrics {
         sample.stop(Timer.builder("matches.duration")
                 .description("OrderMatchingEngine.matchOrder() duration")
                 .publishPercentiles(0.5, 0.95, 0.99)
+                // Emit Prometheus _bucket series too, so histogram_quantile() in Grafana
+                // can aggregate across instances. Without this the quantile labels above
+                // are emitted as a summary, which PromQL bucket math can't read.
+                .publishPercentileHistogram()
                 .register(registry));
     }
 
