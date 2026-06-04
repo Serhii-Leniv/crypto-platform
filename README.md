@@ -41,6 +41,7 @@ A **microservices crypto trading platform** that behaves like a real exchange �
 - [API Reference](#api-reference)
 - [Order Matching](#order-matching)
 - [Engineering Depth](#engineering-depth) — ADRs + `docs/ARCHITECTURE.md`
+- [Performance](#performance) — measured numbers, not adjectives
 - [Observability](#observability)
 - [Kubernetes](#kubernetes)
 - [Local Development](#local-development)
@@ -403,6 +404,35 @@ Each significant design choice is documented as a short **Architecture Decision 
 | [0007](docs/decisions/0007-solo-workflow-direct-push.md) | Solo workflow — direct push for trivia | Why this repo dropped its PR-Agent pipeline |
 
 For the wider how-it-works narrative (sequence diagrams, state-distribution table, failure modes, settlement breakdown), see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+
+---
+
+## Performance
+
+Measured numbers from `load/place-orders.js` (k6) hitting the matching engine end-to-end —
+`validate → walletClient.lock → persist → enter book → match → walletClient.settle` — on a
+single-instance Docker Compose deployment (local dev box, Java 21, virtual threads on).
+
+Two demo users alternate BUY/SELL on `BTC-USDT` so settled trades keep both wallets liquid;
+the gateway's per-user rate limiter (10 req/s) is bypassed by hitting `order-matching:8082`
+directly so we measure the engine, not the limiter.
+
+| VUs | Duration | Throughput (ok) | p50 | p95 | Mean settle | Notes |
+|---:|---:|---:|---:|---:|---:|---|
+|  5 | 30s | **67 orders/s** |  57 ms | 104 ms | 7.7 ms | Contention-free baseline. Wallet pessimistic locks rarely queue. |
+| 10 | 30s | 61 orders/s | 106 ms | 188 ms | 7.7 ms | Wallet-row contention starts to show as tail-latency. |
+| 50 | 30s | 73 orders/s | 452 ms | 666 ms | 7.7 ms | Saturated. Wallet `SELECT FOR UPDATE` is the bottleneck. |
+
+**Settle latency** (Micrometer Timer in `wallet-service`): mean **7.7 ms**, max **89 ms** —
+the full atomic 4-wallet movement + fees + slippage refund inside one transaction.
+
+**Why the throughput ceiling is here:** each match round-trips to `wallet-service` over HTTP
+and serialises through `PESSIMISTIC_WRITE` row locks on the buyer's and seller's wallets.
+That's a deliberate correctness choice ([ADR-0002](docs/decisions/0002-atomic-settlement-transaction.md))
+and the documented next step is sharding by user / symbol — the engine itself is sub-millisecond
+under its per-symbol `ReentrantLock`.
+
+Run it yourself: see [`load/README.md`](load/README.md).
 
 ---
 
