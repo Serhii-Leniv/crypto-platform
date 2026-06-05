@@ -279,6 +279,30 @@ The outbox makes Kafka publishing durable: every domain event is written into `o
 
 ---
 
+## Verifying invariants — property-based tests
+
+The matching engine's behaviour rests on a small set of invariants that must hold for **every** sequence of orders, not just hand-picked unit-test scenarios. These are checked by [jqwik](https://jqwik.net/) property tests under [`order-matching/src/test/java/.../property/`](../order-matching/src/test/java/org/serhiileniv/order/property/):
+
+| Invariant | Where it's tested |
+|---|---|
+| Σ BUY fills == Σ SELL fills (conservation of quantity) | `OrderMatchingEnginePropertyTest.conservationOfQuantity` |
+| Match price ∈ [seller.limit, buyer.limit] | `matchPriceWithinSellerAndBuyerLimits` |
+| Match price == counterparty (maker) price | `matchPriceEqualsMakerPrice` |
+| No match has buyer.userId == seller.userId (STP) | `stpNeverProducesSameUserMatch` |
+| filled never exceeds quantity | `filledNeverExceedsQuantity` |
+| Cancelled order doesn't accumulate further fills | `cancelledOrderDoesNotFillAfterCancellation` |
+| Status transitions (FILLED / PARTIALLY_FILLED) | `fullyFilledOrdersHaveFilledStatus`, `partiallyFilledOrdersHavePartialStatus` |
+| Book add/remove symmetry | `SymbolOrderBookPropertyTest.addThenRemoveIsEmpty` |
+| `bestOppositePrice` ↔ min ask / max bid | `bestOppositePriceForBuyIsMinAsk` (+ symmetric) |
+| `availableCounterpartyQty` respects STP | `availableCounterpartyQtyExcludesAggressorsOwnOrders` |
+| `availableCounterpartyQty` respects price limit | `availableCounterpartyQtyRespectsPriceLimit` |
+
+Each property runs **200–500 random sequences** (≈6 000 sequences total per CI run). On failure jqwik *shrinks* the counterexample to the minimal failing case, so a regression surfaces as the smallest sequence that breaks the invariant, not as a 50-order trace.
+
+Orders are drawn from a small fixed user pool (four IDs) and a narrow price band (90 000–100 000) so STP collisions and crosses both occur frequently. Generating fresh UUIDs and wide prices would make those code paths vanishingly rare.
+
+---
+
 ## Where to read the code
 
 The code is small enough to skim. Suggested reading order:

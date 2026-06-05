@@ -150,6 +150,16 @@
             <artifactId>postgresql</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Property-based testing for the matching engine: jqwik generates
+             thousands of random order sequences and shrinks any counterexample
+             to the minimal failing case. See prep/walkthrough.md §"Property-based testing". -->
+        <dependency>
+            <groupId>net.jqwik</groupId>
+            <artifactId>jqwik</artifactId>
+            <version>1.9.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
