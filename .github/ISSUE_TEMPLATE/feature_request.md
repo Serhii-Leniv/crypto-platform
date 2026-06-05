@@ -28,7 +28,7 @@ labels: enhancement
 - [ ] wallet
 - [ ] market-data
 - [ ] frontend
-- [ ] infrastructure (Docker, k8s)
+- [ ] infrastructure (Docker)
 
 ## Additional Context
 

@@ -8,7 +8,6 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-8-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-ready-326CE5?style=flat-square&logo=kubernetes&logoColor=white)](k8s/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
 A **microservices crypto trading platform** that behaves like a real exchange — not a bootcamp demo. Orders lock funds synchronously before entering the book, matches settle atomically across both wallets in one transaction, the engine refuses to trade a user against themselves, and `IOC` / `FOK` / `POST_ONLY` actually do what their names imply.
@@ -43,7 +42,6 @@ A **microservices crypto trading platform** that behaves like a real exchange �
 - [Engineering Depth](#engineering-depth) — ADRs + `docs/ARCHITECTURE.md`
 - [Performance](#performance) — measured numbers, not adjectives
 - [Observability](#observability)
-- [Kubernetes](#kubernetes)
 - [Local Development](#local-development)
 - [Environment Variables](#environment-variables)
 - [Project Structure](#project-structure)
@@ -89,7 +87,6 @@ A **microservices crypto trading platform** that behaves like a real exchange �
 | **Prometheus + Grafana** | Pre-provisioned metrics dashboard, one `docker compose up` away |
 | **OpenAPI / Swagger UI** | Interactive docs at `/swagger-ui.html` on every service |
 | **Fully Dockerized** | One-command startup — infra + all five services + frontend |
-| **Kubernetes Ready** | Deployment manifests, Services, and Ingress in `k8s/` |
 
 ---
 
@@ -185,7 +182,6 @@ graph TD
 | Tracing | Micrometer Tracing + Zipkin (Brave) |
 | Metrics | Micrometer + Prometheus + Grafana |
 | Containerization | Docker + Docker Compose |
-| Orchestration | Kubernetes (manifests in `k8s/`) |
 | Build Tool | Maven (multi-module) |
 | API Docs | SpringDoc OpenAPI 2.8.6 (Swagger UI) |
 | Frontend | React 19 + TypeScript + TailwindCSS + Vite |
@@ -461,56 +457,6 @@ Each service logs the `traceId` and `spanId` automatically via Micrometer Tracin
 
 ---
 
-## Kubernetes
-
-Production-ready Kubernetes manifests live in `k8s/`:
-
-```
-k8s/
-├── namespace.yaml
-├── configmap.yaml
-├── secrets.yaml
-├── postgres/
-│   ├── deployment.yaml
-│   └── service.yaml
-├── redis/
-│   ├── deployment.yaml
-│   └── service.yaml
-├── kafka/
-│   ├── deployment.yaml
-│   └── service.yaml
-├── auth/
-│   ├── deployment.yaml
-│   └── service.yaml
-├── order-matching/
-│   ├── deployment.yaml
-│   └── service.yaml
-├── wallet/
-│   ├── deployment.yaml
-│   └── service.yaml
-├── market-data/
-│   ├── deployment.yaml
-│   └── service.yaml
-├── gateway/
-│   ├── deployment.yaml
-│   └── service.yaml
-└── ingress.yaml
-```
-
-Deploy to a cluster:
-
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/configmap.yaml
-# Create secrets (edit k8s/secrets.yaml first)
-kubectl apply -f k8s/secrets.yaml
-kubectl apply -f k8s/
-```
-
-Each service deployment includes **liveness** and **readiness** probes wired to `/actuator/health`, so Kubernetes only routes traffic to healthy instances and automatically restarts crashed pods.
-
----
-
 ## Local Development
 
 ```bash
@@ -554,7 +500,6 @@ crypto-platform/
 ├── wallet/                 # Balances, /internal/wallets/{lock,unlock,settle}, DLQ + replay
 ├── market-data/            # 24 h aggregator, WebSocket broadcast, Redis cache, Kafka consumer
 ├── frontend/               # React 19 + TS + TailwindCSS — "Kairos Capital" trading UI + admin panel
-├── k8s/                    # Kubernetes deployment manifests
 ├── docker/                 # PostgreSQL init, Prometheus config, Grafana provisioning
 ├── docker-compose.yml      # Full stack — 4× postgres, 2× redis, Kafka, Zipkin, Prom/Grafana, all 5 services + frontend
 └── pom.xml                 # Parent Maven POM (Java 21, Spring Boot 3.4.5)

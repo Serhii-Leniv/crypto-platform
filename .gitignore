@@ -53,3 +53,4 @@ dump.rdb
 
 # Application
 application-local.properties
+prep/

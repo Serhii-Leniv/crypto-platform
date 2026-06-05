@@ -19,7 +19,7 @@
 - [ ] wallet
 - [ ] market-data
 - [ ] frontend
-- [ ] k8s / Docker Compose
+- [ ] Docker Compose
 
 ## Testing
 
