@@ -10,23 +10,30 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-A **microservices crypto trading platform** that behaves like a real exchange — not a bootcamp demo. Orders lock funds synchronously before entering the book, matches settle atomically across both wallets in one transaction, the engine refuses to trade a user against themselves, and `IOC` / `FOK` / `POST_ONLY` actually do what their names imply.
+A study in **distributed-system patterns** — synchronous fund locking before commitment, atomic multi-resource settlement, transactional outbox for message delivery, in-memory state with database durability, end-to-end observability with custom domain metrics. Illustrated through a working crypto exchange because the domain genuinely needs each pattern.
 
-**The interesting parts** — in priority order, what to look at if you only have ten minutes:
+The engineering surface is the point. The crypto is the canvas.
 
-- **Synchronous fund locking before book entry** ([ADR-0001](docs/decisions/0001-sync-wallet-rest-for-fund-locking.md)) — fixes a class of correctness bugs in the async-Kafka shape it replaced.
-- **Atomic 4-wallet settlement in one transaction** ([ADR-0002](docs/decisions/0002-atomic-settlement-transaction.md)) — buyer-base, buyer-quote, seller-base, seller-quote, fees, slippage refund — all-or-nothing.
-- **In-memory order book under per-symbol `ReentrantLock`** ([ADR-0003](docs/decisions/0003-in-memory-order-book.md)) — `TreeMap<BigDecimal, ArrayDeque<Order>>`, replayed from Postgres on startup.
-- **Real-exchange order semantics** ([ADR-0006](docs/decisions/0006-real-exchange-order-semantics.md)) — GTC / IOC / FOK / POST_ONLY with compensating unlocks, self-trade prevention, stop-limit via scheduled activation.
-- **One Postgres per service** ([ADR-0004](docs/decisions/0004-separate-postgres-per-service.md)) — independent schemas, independent failure domains, no cross-service joins by construction.
+**The patterns demonstrated** — and where you'll find them in the code:
+
+| Engineering problem | Pattern | Where in this codebase |
+|---|---|---|
+| Dual-write to DB and message broker without races | **Transactional outbox** | [ADR-0009](docs/decisions/0009-transactional-outbox-for-kafka.md) · `OutboxPublisher.java` |
+| Multi-resource atomic transaction across users + currencies | **Single `@Transactional` + pessimistic locking** | [ADR-0002](docs/decisions/0002-atomic-settlement-transaction.md) · `WalletService.settleTrade` |
+| Synchronous fund commitment before exposing state | **Sync REST in critical path** (not async messaging) | [ADR-0001](docs/decisions/0001-sync-wallet-rest-for-fund-locking.md) · `OrderService.placeOrder` |
+| Sub-millisecond state lookups with database durability | **In-memory state + startup replay** | [ADR-0003](docs/decisions/0003-in-memory-order-book.md) · `SymbolOrderBook.java` |
+| Cross-instance metric aggregation in Prometheus | **Histogram percentiles** (not summaries) | `TradingMetrics.java` |
+| State-machine correctness under arbitrary input | **Property-based testing** (jqwik, ~5,500 sequences/run) | `*PropertyTest.java` |
+| Per-service schema ownership + failure isolation | **One Postgres per service** | [ADR-0004](docs/decisions/0004-separate-postgres-per-service.md) |
 
 **Where to start**, depending on who you are:
 
 | You are… | Start here |
 |---|---|
-| A recruiter scanning for tech | The badges above + [Quick Start](#quick-start) (one command to a running stack) |
+| A recruiter scanning for tech | The badges above + [docs/SKILLS.md](docs/SKILLS.md) (one table mapping engineering problems to where they're solved here) |
 | An engineer wanting to read the code | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — sequence diagrams + the 8 files worth reading first |
-| Someone curious about *why* it's built this way | [docs/decisions/](docs/decisions/) — 7 short ADRs |
+| Someone curious about *why* it's built this way | [docs/decisions/](docs/decisions/) — 9 short ADRs |
+| Someone evaluating operational discipline | [docs/RUNBOOKS.md](docs/RUNBOOKS.md) — on-call procedures for the Prometheus alerts |
 | Trying it locally right now | `cp .env.example .env && docker compose up --build`; log in as `alice@demo.io` / `Password1` |
 
 ---
@@ -83,7 +90,7 @@ A **microservices crypto trading platform** that behaves like a real exchange �
 | **One Postgres per service** | `postgres-auth/order/wallet/market` — independent migrations and failure domains |
 | **Flyway Migrations** | Versioned schema + repeatable seed scripts on every service DB |
 | **DLQ + Replay** | Kafka business failures retried with exponential backoff, then routed to DLT; failed events visible in the admin panel for manual replay |
-| **Distributed Tracing** | Micrometer Tracing + Zipkin — full request trace across every microservice |
+| **HTTP Tracing** | Micrometer Tracing + Zipkin — traces propagate across HTTP hops via Brave auto-instrumentation. Kafka + WebSocket context propagation is on the roadmap |
 | **Prometheus + Grafana** | Pre-provisioned metrics dashboard, one `docker compose up` away |
 | **OpenAPI / Swagger UI** | Interactive docs at `/swagger-ui.html` on every service |
 | **Fully Dockerized** | One-command startup — infra + all five services + frontend |
@@ -161,7 +168,7 @@ graph TD
 3. Each route is wrapped in a **Resilience4j circuit breaker** — if a downstream is unhealthy, the gateway short-circuits to a fast `503`.
 4. **Order placement is synchronous end-to-end**: `OrderService` pre-generates the order ID, calls `walletClient.lock()` (REST → wallet `/internal/wallets/lock`), then inserts into the in-memory book, then matches under the per-symbol lock. Each match calls `walletClient.settle()` which performs the atomic 4-wallet transfer (buyer-base, buyer-quote, seller-base, seller-quote + fees) in a single wallet-service transaction.
 5. Kafka events (`order-events`) are emitted **after** the in-memory state is consistent — they are an informational stream consumed by `market-data` for analytics. The wallet service no longer consumes order events (its listener is a deliberate no-op, kept for consumer-group offset hygiene).
-6. Micrometer Tracing injects `traceId`/`spanId` headers across every hop (HTTP and Kafka). Spans are exported to **Zipkin**.
+6. Micrometer Tracing + Brave injects `traceId`/`spanId` headers across **HTTP hops** between services. Spans are exported to **Zipkin**. Kafka and WebSocket context propagation is not yet wired — extending it is a tracked improvement.
 
 ---
 
@@ -436,9 +443,11 @@ Run it yourself: see [`load/README.md`](load/README.md).
 
 ## Observability
 
-### Distributed Tracing (Zipkin)
+### HTTP Tracing (Zipkin)
 
-Every HTTP request and Kafka message is instrumented with Micrometer Tracing. Brave propagates `traceId`/`spanId` headers through the gateway, into downstream services, and across Kafka producers and consumers. Traces are exported to **Zipkin** at `http://localhost:9411`.
+HTTP requests between services are instrumented via Micrometer Tracing + Brave auto-instrumentation. `traceId`/`spanId` headers propagate from the gateway down through `auth`, `order-matching`, `wallet`, and `market-data` for any HTTP hop. Spans are exported to **Zipkin** at `http://localhost:9411`.
+
+Trace context propagation through **Kafka messages** (via the outbox publisher) and **WebSocket frames** (STOMP broadcast) is not yet wired — Brave's Kafka instrumentation and manual `traceparent` injection in `OutboxPublisher` would close the loop end-to-end. Documented as a tracked improvement.
 
 Open the Zipkin UI and search by `traceId` to see the full call chain: Gateway → Order-Matching → Kafka → Wallet + Market-Data.
 
@@ -450,6 +459,11 @@ All services expose `/actuator/prometheus`. Prometheus scrapes every 15 s. A pre
 - HTTP request rates, error rates, and latency percentiles
 - Kafka consumer lag
 - Active circuit breaker state (CLOSED / OPEN / HALF-OPEN)
+- Domain metrics — orders placed/rejected/sec by reason, fills by symbol, settle latency p50/p95/p99, fees collected by currency, STP skips, book depth — see [SKILLS.md § Observability](docs/SKILLS.md#observability) for the full catalogue.
+
+### Alerts and runbooks
+
+Four Prometheus alert rules cover the critical paths (settle latency, place-order latency, rejection rate, Kafka consumer lag). Each has a concrete on-call procedure in [docs/RUNBOOKS.md](docs/RUNBOOKS.md) — where to look first, mitigation steps, root-cause investigation, escalation criteria.
 
 ### Structured Logging
 
