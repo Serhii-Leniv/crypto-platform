@@ -5,7 +5,7 @@ import lombok.NoArgsConstructor;
 import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderType;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Data
@@ -19,10 +19,10 @@ public class OrderPlacedEvent {
     private OrderSide side;
     private BigDecimal price;
     private BigDecimal quantity;
-    private LocalDateTime timestamp;
+    private Instant timestamp;
 
     public OrderPlacedEvent(UUID orderId, UUID userId, String symbol, OrderType orderType,
-                            OrderSide side, BigDecimal price, BigDecimal quantity, LocalDateTime timestamp) {
+                            OrderSide side, BigDecimal price, BigDecimal quantity, Instant timestamp) {
         this.orderId = orderId;
         this.userId = userId;
         this.symbol = symbol;

@@ -7,7 +7,7 @@ import org.serhiileniv.order.model.OrderSide;
 import org.serhiileniv.order.model.OrderStatus;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -140,7 +140,7 @@ public class SymbolOrderBook {
                     symbol,
                     aggregateLevels(bids, MARKET_BUY_SENTINEL),
                     aggregateLevels(asks, MARKET_SELL_SENTINEL),
-                    LocalDateTime.now());
+                    Instant.now());
         } finally {
             lock.unlock();
         }

@@ -7,7 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,7 +29,7 @@ public interface TradeRepository extends JpaRepository<Trade, UUID> {
         FROM trades t
         WHERE t.symbol = :symbol AND t.traded_at >= :since
         """, nativeQuery = true)
-    Aggregates aggregateSince(@Param("symbol") String symbol, @Param("since") LocalDateTime since);
+    Aggregates aggregateSince(@Param("symbol") String symbol, @Param("since") Instant since);
 
     List<Trade> findTop10BySymbolOrderByTradedAtDesc(String symbol);
 

@@ -2,9 +2,8 @@ package org.serhiileniv.wallet.model;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -43,14 +42,16 @@ public class FailedEvent {
     @Column(length = 255)
     private String errorClass;
 
-    @CreationTimestamp
     @Column(nullable = false, updatable = false)
-    private LocalDateTime failedAt;
+    private Instant failedAt;
+
+    @PrePersist
+    void onCreate() { if (this.failedAt == null) this.failedAt = Instant.now(); }
 
     @Column(nullable = false)
     @Builder.Default
     private boolean replayed = false;
 
     @Column
-    private LocalDateTime replayedAt;
+    private Instant replayedAt;
 }

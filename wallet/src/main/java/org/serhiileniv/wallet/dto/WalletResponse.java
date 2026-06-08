@@ -5,7 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.serhiileniv.wallet.model.Wallet;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 @Data
 @Builder
@@ -18,8 +18,8 @@ public class WalletResponse {
     private BigDecimal balance;
     private BigDecimal lockedBalance;
     private BigDecimal availableBalance;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private Instant createdAt;
+    private Instant updatedAt;
     public static WalletResponse from(Wallet wallet) {
         return WalletResponse.builder()
                 .id(wallet.getId())

@@ -19,7 +19,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -55,7 +55,7 @@ class OrderControllerTest {
                 new BigDecimal("45000"), new BigDecimal("0.1"),
                 BigDecimal.ZERO, OrderStatus.PENDING,
                 org.serhiileniv.order.model.TimeInForce.GTC, null,
-                LocalDateTime.now(), LocalDateTime.now());
+                Instant.now(), Instant.now());
     }
 
     @Test

@@ -13,7 +13,7 @@ import org.serhiileniv.marketdata.repository.MarketDataRepository;
 import org.serhiileniv.marketdata.repository.TradeRepository;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -74,7 +74,7 @@ class MarketDataServiceTest {
     void updateMarketData_PersistsTradeAndRecomputesFromAggregates() {
         Aggs agg = new Aggs(new BigDecimal("52000"), new BigDecimal("49000"),
                 new BigDecimal("3.5"), 7L, new BigDecimal("50000"), new BigDecimal("51000"));
-        when(tradeRepository.aggregateSince(eqSymbol(), any(LocalDateTime.class))).thenReturn(agg);
+        when(tradeRepository.aggregateSince(eqSymbol(), any(Instant.class))).thenReturn(agg);
         when(marketDataRepository.findBySymbolWithLock(symbol)).thenReturn(Optional.of(marketData));
 
         marketDataService.updateMarketData(symbol, new BigDecimal("51000"), new BigDecimal("0.5"));
@@ -89,7 +89,7 @@ class MarketDataServiceTest {
 
     @Test
     void recomputeMetrics_NoTradesInWindow_ZeroesAggregatesKeepsLastPrice() {
-        when(tradeRepository.aggregateSince(eqSymbol(), any(LocalDateTime.class)))
+        when(tradeRepository.aggregateSince(eqSymbol(), any(Instant.class)))
                 .thenReturn(new Aggs(null, null, null, 0L, null, null));
         when(marketDataRepository.findBySymbolWithLock(symbol)).thenReturn(Optional.of(marketData));
 

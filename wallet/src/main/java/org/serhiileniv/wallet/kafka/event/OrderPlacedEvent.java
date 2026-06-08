@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Data
@@ -19,5 +19,5 @@ public class OrderPlacedEvent {
     private OrderSide side;
     private BigDecimal price;
     private BigDecimal quantity;
-    private LocalDateTime timestamp;
+    private Instant timestamp;
 }

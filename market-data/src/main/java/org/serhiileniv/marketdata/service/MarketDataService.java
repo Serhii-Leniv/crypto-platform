@@ -16,7 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -57,7 +58,7 @@ public class MarketDataService {
                 .symbol(symbol)
                 .price(price)
                 .quantity(quantity)
-                .tradedAt(LocalDateTime.now())
+                .tradedAt(Instant.now())
                 .build());
         return recomputeMetrics(symbol);
     }
@@ -73,7 +74,7 @@ public class MarketDataService {
             @CacheEvict(value = "allMarketData", allEntries = true)
     })
     public MarketData recomputeMetrics(String symbol) {
-        LocalDateTime windowStart = LocalDateTime.now().minusHours(24);
+        Instant windowStart = Instant.now().minus(24, ChronoUnit.HOURS);
         TradeRepository.Aggregates agg = tradeRepository.aggregateSince(symbol, windowStart);
 
         MarketData md = marketDataRepository.findBySymbolWithLock(symbol)

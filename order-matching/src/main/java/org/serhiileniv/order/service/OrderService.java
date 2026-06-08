@@ -28,7 +28,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -130,7 +130,7 @@ public class OrderService {
                                 order.getSide(),
                                 order.getPrice(),
                                 order.getQuantity(),
-                                LocalDateTime.now());
+                                Instant.now());
                 outboxService.recordOrderPlaced(placedEvent);
 
                 matchingEngine.matchOrder(order);
@@ -270,7 +270,7 @@ public class OrderService {
                                 remaining,
                                 order.getPrice(),
                                 "Cancelled by user",
-                                LocalDateTime.now());
+                                Instant.now());
                 outboxService.recordOrderCancelled(cancelledEvent);
                 log.info("Order cancelled: {}", orderId);
         }

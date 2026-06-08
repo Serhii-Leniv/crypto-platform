@@ -1,9 +1,8 @@
 package org.serhiileniv.wallet.model;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 @Entity
 @Table(name = "transactions", indexes = {
@@ -36,7 +35,9 @@ public class Transaction {
     private TransactionStatus status = TransactionStatus.PENDING;
     @Column(length = 500)
     private String description;
-    @CreationTimestamp
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
+
+    @PrePersist
+    void onCreate() { this.createdAt = Instant.now(); }
 }

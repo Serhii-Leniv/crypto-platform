@@ -4,7 +4,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.serhiileniv.order.model.OrderSide;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Data
@@ -18,11 +18,11 @@ public class OrderCancelledEvent {
     private BigDecimal remainingQuantity;
     private BigDecimal price;
     private String reason;
-    private LocalDateTime timestamp;
+    private Instant timestamp;
 
     public OrderCancelledEvent(UUID orderId, UUID userId, String symbol, OrderSide side,
                                BigDecimal remainingQuantity, BigDecimal price,
-                               String reason, LocalDateTime timestamp) {
+                               String reason, Instant timestamp) {
         this.orderId = orderId;
         this.userId = userId;
         this.symbol = symbol;

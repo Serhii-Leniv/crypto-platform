@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -151,7 +151,7 @@ public class OrderMatchingEngine {
         event.setSymbol(newOrder.getSymbol());
         event.setPrice(matchPrice);
         event.setQuantity(fillQty);
-        event.setTimestamp(LocalDateTime.now());
+        event.setTimestamp(Instant.now());
         return event;
     }
 

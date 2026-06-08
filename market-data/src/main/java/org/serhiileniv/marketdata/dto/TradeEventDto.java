@@ -1,7 +1,7 @@
 package org.serhiileniv.marketdata.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 public record TradeEventDto(
@@ -9,5 +9,5 @@ public record TradeEventDto(
         String symbol,
         BigDecimal price,
         BigDecimal quantity,
-        LocalDateTime timestamp
+        Instant timestamp
 ) {}

@@ -5,7 +5,7 @@ import org.serhiileniv.order.model.OrderStatus;
 import org.serhiileniv.order.model.OrderType;
 import org.serhiileniv.order.model.TimeInForce;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 public record OrderResponse(
         UUID id,
@@ -19,8 +19,8 @@ public record OrderResponse(
         OrderStatus status,
         TimeInForce timeInForce,
         BigDecimal triggerPrice,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt) {
+        Instant createdAt,
+        Instant updatedAt) {
     public static OrderResponse fromEntity(Order order) {
         return new OrderResponse(
                 order.getId(),

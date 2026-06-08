@@ -1,11 +1,9 @@
 package org.serhiileniv.order.model;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.data.domain.Persistable;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 @Entity
 @Table(name = "orders", indexes = {
@@ -68,12 +66,22 @@ public class Order implements Persistable<UUID> {
     /** Activation level for STOP_LIMIT orders; null for plain LIMIT/MARKET. */
     @Column(name = "trigger_price", precision = 20, scale = 8)
     private BigDecimal triggerPrice;
-    @CreationTimestamp
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-    @UpdateTimestamp
+    private Instant createdAt;
     @Column(nullable = false)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
+
+    @PrePersist
+    void onCreate() {
+        Instant now = Instant.now();
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        this.updatedAt = Instant.now();
+    }
     public BigDecimal getRemainingQuantity() {
         return quantity.subtract(filledQuantity);
     }

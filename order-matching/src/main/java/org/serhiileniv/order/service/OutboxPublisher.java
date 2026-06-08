@@ -12,7 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * See ADR-0009.
  */
+
 @Component
 @Slf4j
 public class OutboxPublisher {
@@ -66,7 +67,7 @@ public class OutboxPublisher {
                 kafkaTemplate
                         .send(TOPIC, row.getAggregateId().toString(), row.getPayload())
                         .get(5, TimeUnit.SECONDS);  // sync per row keeps ordering + lets us mark on success
-                row.setPublishedAt(LocalDateTime.now());
+                row.setPublishedAt(Instant.now());
                 row.setLastError(null);
                 registry.counter("orderbook.outbox.published", Tags.of("outcome", "success")).increment();
             } catch (Exception e) {

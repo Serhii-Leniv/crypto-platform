@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -31,5 +31,5 @@ public class Trade {
     private BigDecimal quantity;
 
     @Column(name = "traded_at", nullable = false)
-    private LocalDateTime tradedAt;
+    private Instant tradedAt;
 }

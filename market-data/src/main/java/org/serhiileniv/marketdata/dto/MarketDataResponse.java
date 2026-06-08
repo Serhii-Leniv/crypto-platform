@@ -5,7 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.serhiileniv.marketdata.model.MarketData;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 @Data
 @Builder
@@ -21,7 +21,7 @@ public class MarketDataResponse {
     private BigDecimal priceChange24h;
     private BigDecimal priceChangePercent24h;
     private Long tradeCount24h;
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
     public static MarketDataResponse from(MarketData marketData) {
         return MarketDataResponse.builder()
                 .id(marketData.getId())

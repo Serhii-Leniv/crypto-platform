@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Data
@@ -20,5 +20,5 @@ public class OrderMatchedEvent {
     private BigDecimal quantity;
     private UUID buyerUserId;
     private UUID sellerUserId;
-    private LocalDateTime timestamp;
+    private Instant timestamp;
 }

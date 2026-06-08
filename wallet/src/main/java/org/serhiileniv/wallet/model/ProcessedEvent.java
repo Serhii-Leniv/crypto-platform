@@ -3,8 +3,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 @Entity
 @Table(name = "processed_events", indexes = {
@@ -21,9 +20,11 @@ public class ProcessedEvent {
     private UUID eventId;
     @Column(nullable = false, length = 50)
     private String eventType;
-    @CreationTimestamp
     @Column(nullable = false, updatable = false)
-    private LocalDateTime processedAt;
+    private Instant processedAt;
+
+    @PrePersist
+    void onCreate() { this.processedAt = Instant.now(); }
     public ProcessedEvent(UUID eventId, String eventType) {
         this.eventId = eventId;
         this.eventType = eventType;

@@ -2,11 +2,9 @@ package org.serhiileniv.wallet.model;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 import org.serhiileniv.wallet.exception.InsufficientFundsException;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -33,12 +31,22 @@ public class Wallet {
     @Column(nullable = false, precision = 20, scale = 8)
     @Builder.Default
     private BigDecimal lockedBalance = BigDecimal.ZERO;
-    @CreationTimestamp
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-    @UpdateTimestamp
+    private Instant createdAt;
     @Column(nullable = false)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
+
+    @PrePersist
+    void onCreate() {
+        Instant now = Instant.now();
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        this.updatedAt = Instant.now();
+    }
 
     public BigDecimal getAvailableBalance() {
         return balance.subtract(lockedBalance);

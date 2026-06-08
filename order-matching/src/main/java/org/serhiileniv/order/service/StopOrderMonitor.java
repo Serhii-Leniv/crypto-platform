@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -63,7 +63,7 @@ public class StopOrderMonitor {
             applicationEventPublisher.publishEvent(new OrderPlacedEvent(
                     stop.getId(), stop.getUserId(), stop.getSymbol(),
                     OrderType.LIMIT, stop.getSide(),
-                    stop.getPrice(), stop.getQuantity(), LocalDateTime.now()));
+                    stop.getPrice(), stop.getQuantity(), Instant.now()));
 
             matchingEngine.matchOrder(stop);
         }

@@ -13,7 +13,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,7 +45,7 @@ class MarketDataControllerTest {
                 .priceChange24h(new BigDecimal("500"))
                 .priceChangePercent24h(new BigDecimal("1.00"))
                 .tradeCount24h(42L)
-                .updatedAt(LocalDateTime.now())
+                .updatedAt(Instant.now())
                 .build();
     }
 

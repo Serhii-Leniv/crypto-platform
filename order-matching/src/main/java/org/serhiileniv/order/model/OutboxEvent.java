@@ -2,10 +2,9 @@ package org.serhiileniv.order.model;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
 import org.springframework.data.domain.Persistable;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -44,13 +43,15 @@ public class OutboxEvent implements Persistable<UUID> {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String payload;
 
-    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
+
+    @PrePersist
+    void onCreate() { this.createdAt = Instant.now(); }
 
     /** Set the instant the broker confirms acceptance. Null until then. */
     @Column(name = "published_at")
-    private LocalDateTime publishedAt;
+    private Instant publishedAt;
 
     @Column(nullable = false)
     @Builder.Default

@@ -3,7 +3,7 @@ package org.serhiileniv.order.kafka.event;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Data
@@ -20,12 +20,12 @@ public class OrderMatchedEvent {
     private BigDecimal sellerLimitPrice;
     private UUID buyerUserId;
     private UUID sellerUserId;
-    private LocalDateTime timestamp;
+    private Instant timestamp;
 
     public OrderMatchedEvent(UUID tradeId, UUID buyOrderId, UUID sellOrderId, String symbol,
                              BigDecimal price, BigDecimal quantity,
                              BigDecimal buyerLimitPrice, BigDecimal sellerLimitPrice,
-                             UUID buyerUserId, UUID sellerUserId, LocalDateTime timestamp) {
+                             UUID buyerUserId, UUID sellerUserId, Instant timestamp) {
         this.tradeId = tradeId;
         this.buyOrderId = buyOrderId;
         this.sellOrderId = sellOrderId;

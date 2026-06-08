@@ -2,10 +2,9 @@ package org.serhiileniv.order.model;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "trading_pairs")
@@ -43,9 +42,11 @@ public class TradingPair {
     @Builder.Default
     private Integer takerFeeBps = 20;
 
-    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
+
+    @PrePersist
+    void onCreate() { if (this.createdAt == null) this.createdAt = Instant.now(); }
 
     public boolean isActive() {
         return "ACTIVE".equals(status);

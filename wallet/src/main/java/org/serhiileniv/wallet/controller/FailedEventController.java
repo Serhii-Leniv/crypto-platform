@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,7 +42,7 @@ public class FailedEventController {
         kafkaTemplate.send(event.getTopic(), event.getKey(), event.getPayload());
 
         event.setReplayed(true);
-        event.setReplayedAt(LocalDateTime.now());
+        event.setReplayedAt(Instant.now());
         failedEventRepository.save(event);
 
         log.info("Failed event id={} successfully replayed to topic={}", id, event.getTopic());
